@@ -221,34 +221,43 @@ function(find_python_libs_windows)
 endfunction(find_python_libs_windows)
 
 if (NOT LLDB_DISABLE_PYTHON)
-  if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
-    find_python_libs_windows()
-
-    if (NOT LLDB_RELOCATABLE_PYTHON)
-      file(TO_CMAKE_PATH "${PYTHON_HOME}" LLDB_PYTHON_HOME)
-      add_definitions( -DLLDB_PYTHON_HOME="${LLDB_PYTHON_HOME}" )
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13 AND CMAKE_SYSTEM_NAME STREQUAL Windows)
+    find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+    if(Python3_VERSION VERSION_LESS 3.5)
+      message(FATAL_ERROR "Python 3.5 or newer is required (found: ${Python3_VERSION})")
     endif()
+    set(PYTHON_LIBRARY ${Python3_LIBRARIES})
+    include_directories(${Python3_INCLUDE_DIRS})
   else()
-    find_package(PythonInterp REQUIRED)
-    find_package(PythonLibs REQUIRED)
-  endif()
+    if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
+      find_python_libs_windows()
 
-  if (NOT CMAKE_CROSSCOMPILING)
-    string(REPLACE "." ";" pythonlibs_version_list ${PYTHONLIBS_VERSION_STRING})
-    list(GET pythonlibs_version_list 0 pythonlibs_major)
-    list(GET pythonlibs_version_list 1 pythonlibs_minor)
-
-    # Ignore the patch version. Some versions of macOS report a different patch
-    # version for the system provided interpreter and libraries.
-    if (NOT PYTHON_VERSION_MAJOR VERSION_EQUAL pythonlibs_major OR
-        NOT PYTHON_VERSION_MINOR VERSION_EQUAL pythonlibs_minor)
-      message(FATAL_ERROR "Found incompatible Python interpreter (${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})"
-                          " and Python libraries (${pythonlibs_major}.${pythonlibs_minor})")
+      if (NOT LLDB_RELOCATABLE_PYTHON)
+        file(TO_CMAKE_PATH "${PYTHON_HOME}" LLDB_PYTHON_HOME)
+        add_definitions( -DLLDB_PYTHON_HOME="${LLDB_PYTHON_HOME}" )
+      endif()
+    else()
+      find_package(PythonInterp REQUIRED)
+      find_package(PythonLibs REQUIRED)
     endif()
-  endif()
 
-  if (PYTHON_INCLUDE_DIR)
-    include_directories(${PYTHON_INCLUDE_DIR})
+    if (NOT CMAKE_CROSSCOMPILING)
+      string(REPLACE "." ";" pythonlibs_version_list ${PYTHONLIBS_VERSION_STRING})
+      list(GET pythonlibs_version_list 0 pythonlibs_major)
+      list(GET pythonlibs_version_list 1 pythonlibs_minor)
+
+      # Ignore the patch version. Some versions of macOS report a different patch
+      # version for the system provided interpreter and libraries.
+      if (NOT PYTHON_VERSION_MAJOR VERSION_EQUAL pythonlibs_major OR
+          NOT PYTHON_VERSION_MINOR VERSION_EQUAL pythonlibs_minor)
+        message(FATAL_ERROR "Found incompatible Python interpreter (${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})"
+                            " and Python libraries (${pythonlibs_major}.${pythonlibs_minor})")
+      endif()
+    endif()
+
+    if (PYTHON_INCLUDE_DIR)
+      include_directories(${PYTHON_INCLUDE_DIR})
+    endif()
   endif()
 endif()
 
