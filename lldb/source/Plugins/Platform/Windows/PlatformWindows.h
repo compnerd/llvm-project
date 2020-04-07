@@ -42,6 +42,15 @@ public:
 
   lldb_private::Status DisconnectRemote() override;
 
+  uint32_t DoLoadImage(lldb_private::Process *process,
+                       const lldb_private::FileSpec &remote_file,
+                       const std::vector<std::string> *paths,
+                       lldb_private::Status &error,
+                       lldb_private::FileSpec *loaded_path) override;
+
+  lldb_private::Status UnloadImage(lldb_private::Process *process,
+                                   uint32_t image_token) override;
+
   lldb::ProcessSP DebugProcess(lldb_private::ProcessLaunchInfo &launch_info,
                                lldb_private::Debugger &debugger,
                                lldb_private::Target *target,
@@ -63,6 +72,14 @@ public:
   void CalculateTrapHandlerSymbolNames() override {}
 
   ConstString GetFullNameForDylib(ConstString basename) override;
+
+private:
+  PlatformWindows(const PlatformWindows &) = delete;
+  const PlatformWindows &operator=(const PlatformWindows &) = delete;
+
+  lldb_private::Status EvaluateLoaderExpression(lldb_private::Process *process,
+                                                const char *expression,
+                                                lldb::ValueObjectSP &value);
 };
 
 } // namespace lldb_private
