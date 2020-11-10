@@ -10,6 +10,7 @@
 #define LLVM_CLANG_APINOTES_TYPES_H
 
 #include "clang/Basic/Specifiers.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include <climits>
@@ -728,6 +729,24 @@ inline bool operator==(const TypedefInfo &LHS, const TypedefInfo &RHS) {
 inline bool operator!=(const TypedefInfo &LHS, const TypedefInfo &RHS) {
   return !(LHS == RHS);
 }
+
+/// Opaque context ID used to refer to an Objective-C class or protocol.
+class ContextID {
+public:
+  unsigned Value;
+  explicit ContextID(unsigned value) : Value(value) {}
+};
+
+/// A temporary reference to an Objective-C selector, suitable for
+/// referencing selector data on the stack.
+///
+/// Instances of this struct do not store references to any of the
+/// data they contain; it is up to the user to ensure that the data
+/// referenced by the identifier list persists.
+struct ObjCSelectorRef {
+  unsigned NumPieces;
+  llvm::ArrayRef<llvm::StringRef> Identifiers;
+};
 } // namespace api_notes
 } // namespace clang
 

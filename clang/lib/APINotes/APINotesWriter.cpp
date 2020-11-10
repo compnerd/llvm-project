@@ -19,11 +19,11 @@
 
 namespace clang {
 namespace api_notes {
-class APINotesWriter::Implementation {
-  template <typename T>
-  using VersionedSmallVector =
-      llvm::SmallVector<std::pair<llvm::VersionTuple, T>, 1>;
+template <typename T>
+using VersionedSmallVector =
+    llvm::SmallVector<std::pair<llvm::VersionTuple, T>, 1>;
 
+class APINotesWriter::Implementation {
   std::string ModuleName;
   const FileEntry *SourceFile;
 
@@ -37,6 +37,7 @@ class APINotesWriter::Implementation {
   /// Mapping from strings to identifier IDs.
   llvm::StringMap<IdentifierID> IdentifierIDs;
 
+public:
   /// Information about Objective-C contexts (classes or protocols).
   ///
   /// Indexed by the identifier ID and a bit indication whether we're looking
@@ -101,6 +102,9 @@ class APINotesWriter::Implementation {
                  llvm::SmallVector<std::pair<VersionTuple, TypedefInfo>, 1>>
       Typedefs;
 
+  /// Mapping from context IDs to the identifier ID holding the name.
+  llvm::DenseMap<unsigned, unsigned> ObjCContextNames;
+
   void writeBlockInfoBlock(llvm::BitstreamWriter &Stream);
   void writeControlBlock(llvm::BitstreamWriter &Stream);
   void writeIdentifierBlock(llvm::BitstreamWriter &Stream);
@@ -119,6 +123,34 @@ public:
       : ModuleName(std::string(ModuleName)), SourceFile(SF) {}
 
   void writeToStream(llvm::raw_ostream &OS);
+
+  /// Retrieve the ID for the given identifier.
+  IdentifierID getIdentifier(StringRef Ident) {
+    if (Ident.empty())
+      return 0;
+
+    auto II = IdentifierIDs.find(Ident);
+    if (II == IdentifierIDs.end())
+      II = IdentifierIDs.insert({Ident, IdentifierIDs.size() + 1}).first;
+
+    return II->second;
+  }
+
+  /// Retrieve the ID for the given selector.
+  SelectorID getSelector(ObjCSelectorRef SelRef) {
+    // Translate the selector reference into a stored selector.
+    StoredObjCSelector Selector;
+    Selector.NumPieces = SelRef.NumPieces;
+    Selector.Identifiers.reserve(SelRef.Identifiers.size());
+    for (auto Ident : SelRef.Identifiers)
+      Selector.Identifiers.push_back(getIdentifier(Ident));
+
+    auto SI = SelectorIDs.find(Selector);
+    if (SI == SelectorIDs.end())
+      SI = SelectorIDs.insert({Selector, SelectorIDs.size()}).first;
+
+    return SI->second;
+  }
 };
 
 void APINotesWriter::Implementation::writeToStream(llvm::raw_ostream &OS) {
@@ -1161,5 +1193,124 @@ APINotesWriter::~APINotesWriter() = default;
 void APINotesWriter::writeToStream(llvm::raw_ostream &OS) {
   Implementation->writeToStream(OS);
 }
+
+ContextID APINotesWriter::addObjCContext(llvm::StringRef Name, bool IsClass,
+                                         const ObjCContextInfo &OCI,
+                                         llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+
+  std::pair<unsigned, char> Key(IID, IsClass ? 0 : 1);
+  auto Known = Implementation->ObjCContexts.find(Key);
+  if (Known == Implementation->ObjCContexts.end()) {
+    unsigned NextID = Implementation->ObjCContexts.size() + 1;
+
+    Known = Implementation->ObjCContexts
+                .insert(std::make_pair(
+                    Key, std::make_pair(
+                             NextID, VersionedSmallVector<ObjCContextInfo>{})))
+                .first;
+    Implementation->ObjCContextNames[NextID] = IID;
+  }
+
+  // Add this version information.
+  bool Found = false;
+  auto &VersionedContexts = Known->second.second;
+  for (auto &Context : VersionedContexts) {
+    if (Context.first == SwiftVersion) {
+      Context.second |= OCI;
+      Found = true;
+      break;
+    }
+  }
+
+  if (!Found)
+    VersionedContexts.emplace_back(SwiftVersion, OCI);
+  return ContextID(Known->second.first);
+}
+
+void APINotesWriter::addObjCProperty(ContextID ContextID, StringRef Name,
+                                     bool IsInstance,
+                                     const ObjCPropertyInfo &OPI,
+                                     llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+  Implementation
+      ->ObjCProperties[std::make_tuple(ContextID.Value, IID, IsInstance)]
+      .push_back({SwiftVersion, OPI});
+}
+
+void APINotesWriter::addObjCMethod(ContextID ContextID,
+                                   ObjCSelectorRef Selector,
+                                   bool IsInstanceMethod,
+                                   const ObjCMethodInfo &OMI,
+                                   llvm::VersionTuple SwiftVersion) {
+  SelectorID SID = Implementation->getSelector(Selector);
+
+  std::tuple<unsigned, unsigned, char> Key = {ContextID.Value, SID,
+                                              IsInstanceMethod};
+  Implementation->ObjCMethods[Key].push_back({SwiftVersion, OMI});
+
+  // If this method is a designated initializer, update the class to note that
+  // it has designated initializers.
+  if (OMI.DesignatedInit) {
+    std::pair<unsigned, char> Key = {
+        Implementation->ObjCContextNames[ContextID.Value], 0};
+
+    assert(Implementation->ObjCContexts.count(Key));
+    auto &VersionedContexts = Implementation->ObjCContexts[Key].second;
+
+    bool Found = false;
+    for (auto &Context : VersionedContexts) {
+      if (Context.first == SwiftVersion) {
+        Context.second.setHasDesignatedInits(true);
+        Found = true;
+        break;
+      }
+    }
+
+    if (!Found) {
+      VersionedContexts.emplace_back(SwiftVersion, ObjCContextInfo());
+      VersionedContexts.back().second.setHasDesignatedInits(true);
+    }
+  }
+}
+
+void APINotesWriter::addGlobalVariable(llvm::StringRef Name,
+                                       const GlobalVariableInfo &GVI,
+                                       llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+  Implementation->GlobalVariables[IID].push_back({SwiftVersion, GVI});
+}
+
+void APINotesWriter::addGlobalFunction(llvm::StringRef Name,
+                                       const GlobalFunctionInfo &GFI,
+                                       llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+  Implementation->GlobalFunctions[IID].push_back({SwiftVersion, GFI});
+}
+
+void APINotesWriter::addEnumConstant(llvm::StringRef Name,
+                                     const EnumConstantInfo &ECI,
+                                     llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+  Implementation->EnumConstants[IID].push_back({SwiftVersion, ECI});
+}
+
+void APINotesWriter::addTag(llvm::StringRef Name, const TagInfo &TI,
+                            llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+  Implementation->Tags[IID].push_back({SwiftVersion, TI});
+}
+
+void APINotesWriter::addTypedef(llvm::StringRef Name, const TypedefInfo &TI,
+                                llvm::VersionTuple SwiftVersion) {
+  IdentifierID IID = Implementation->getIdentifier(Name);
+  Implementation->Typedefs[IID].push_back({SwiftVersion, TI});
+}
+
+#if defined(__APPLE__) && defined(SWIFT_DOWNSTREAM)
+void APINotesWriter::addModuleOptions(ModuleOptions MO) {
+  Implementation->SwiftInferImportAsMember = MO.SwiftInferImportAsMember;
+}
+#endif
 } // namespace api_notes
 } // namespace clang
