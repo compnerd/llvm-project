@@ -147,6 +147,7 @@ public:
       llvm::SmallVector<std::pair<llvm::VersionTuple, UnversionedDataType>, 1>;
   using hash_value_type = size_t;
   using offset_type = unsigned;
+  using unversioned_type = UnversionedDataType;
 
   internal_key_type GetInternalKey(external_key_type Key) { return Key; }
 
@@ -696,6 +697,30 @@ public:
                         llvm::SmallVectorImpl<uint64_t> &Scratch);
 
   bool Load();
+
+  /// Retrieve the identifier ID for the given string.
+  llvm::Optional<IdentifierID> getIdentifier(llvm::StringRef Identifier);
+
+  /// Retrieve the selector ID for the given selector.
+  llvm::Optional<SelectorID> getSelector(ObjCSelectorRef Selector);
+
+  template <typename TableType>
+  APINotesReader::VersionedInfo<
+      typename TableType::base_type::InfoType::unversioned_type>
+  lookup(std::unique_ptr<TableType> &Table, llvm::StringRef Name) {
+    if (!Table)
+      return llvm::None;
+
+    llvm::Optional<IdentifierID> IID = getIdentifier(Name);
+    if (!IID)
+      return llvm::None;
+
+    auto KnownInfo = Table->find(*IID);
+    if (KnownInfo == Table->end())
+      return llvm::None;
+
+    return {SwiftVersion, *KnownInfo};
+  }
 };
 
 namespace {
@@ -1269,6 +1294,50 @@ bool APINotesReader::Implementation::Load() {
   return true;
 }
 
+llvm::Optional<IdentifierID>
+APINotesReader::Implementation::getIdentifier(llvm::StringRef Name) {
+  if (!IdentifierTable)
+    return llvm::None;
+
+  if (Name.empty())
+    return IdentifierID(0);
+
+  auto IID = IdentifierTable->find(Name);
+  if (IID == IdentifierTable->end())
+    return llvm::None;
+  return *IID;
+}
+
+template <typename T>
+APINotesReader::VersionedInfo<T>::VersionedInfo(llvm::VersionTuple Version,
+                                                llvm::SmallVector<std::pair<llvm::VersionTuple, T>, 1> Input)
+    : Info(std::move(Input)) {
+  assert(!Info.empty());
+  assert(std::is_sorted(std::begin(Info), std::end(Info),
+                        [](const std::pair<llvm::VersionTuple, T> &LHS,
+                           const std::pair<llvm::VersionTuple, T> &RHS) -> bool {
+                        assert(LHS.first != RHS.first && "duplicate entries for the same version");
+                        return LHS.first < RHS.first;
+                        }));
+
+  Selected = Info.size();
+  for (auto &VI : Info) {
+    if (!Version.empty() && VI.first >= Version) {
+      // If the current version is "4", then entries for 4 are better than
+      // entries for 5, but both are valid. Because entries are sorted, we get
+      // that behavior by picking the first match.
+      Selected = std::distance(&VI, std::begin(Info));
+      break;
+    }
+  }
+
+  // If we didn't find a match but we have an unversioned result, use the
+  // unversioned result. This will always be the first entry because we encode
+  // it as version 0.
+  if (Selected == Info.size() && Info[0].first.empty())
+    Selected = 0;
+}
+
 // APINotesReader
 
 APINotesReader::APINotesReader(llvm::MemoryBuffer *MB, bool OwnsMB,
@@ -1288,6 +1357,124 @@ APINotesReader::create(std::unique_ptr<llvm::MemoryBuffer> MB,
   if (Result)
     return reader;
   return nullptr;
+}
+
+llvm::StringRef APINotesReader::getModuleName() const {
+  return Implementation->ModuleName;
+}
+
+llvm::Optional<std::pair<off_t, time_t>>
+APINotesReader::getSourceFileSizeAndModificationTime() const {
+  return Implementation->SourceFileSizeAndModificationTime;
+}
+
+#if defined(__APPLE__) && defined(SWIFT_DOWNSTREAM)
+ModuleOptions APINotesReader::getModuleOptions() const {
+  return Implementation->ModuleOpts;
+}
+#endif
+
+llvm::Optional<ContextID>
+APINotesReader::lookupObjCClassID(llvm::StringRef Name) {
+  if (!Implementation->ObjCContextIDTable)
+    return llvm::None;
+
+  llvm::Optional<IdentifierID> IID = Implementation->getIdentifier(Name);
+  if (!IID)
+    return llvm::None;
+
+  auto KnownID = Implementation->ObjCContextIDTable->find({*IID, '\0'});
+  if (KnownID == Implementation->ObjCContextIDTable->end())
+    return llvm::None;
+
+  return ContextID(*KnownID);
+}
+
+APINotesReader::VersionedInfo<ObjCContextInfo>
+APINotesReader::lookupObjCClassInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->ObjCContextInfoTable, Name);
+}
+
+llvm::Optional<ContextID>
+APINotesReader::lookupObjCProtocolID(llvm::StringRef Name) {
+  if (!Implementation->ObjCContextIDTable)
+    return llvm::None;
+
+  llvm::Optional<IdentifierID> IID = Implementation->getIdentifier(Name);
+  if (!IID)
+    return llvm::None;
+
+  auto KnownID = Implementation->ObjCContextIDTable->find({*IID, '\1'});
+  if (KnownID == Implementation->ObjCContextIDTable->end())
+    return llvm::None;
+
+  return ContextID(*KnownID);
+}
+
+APINotesReader::VersionedInfo<ObjCContextInfo>
+APINotesReader::lookupObjCProtocolInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->ObjCContextInfoTable, Name);
+}
+
+APINotesReader::VersionedInfo<ObjCPropertyInfo>
+APINotesReader::lookupObjCPropertyInfo(ContextID Context, llvm::StringRef Name,
+                                       bool Instance) {
+  if (!Implementation->ObjCPropertyTable)
+    return llvm::None;
+
+  llvm::Optional<IdentifierID> IID = Implementation->getIdentifier(Name);
+  if (!IID)
+    return llvm::None;
+
+  auto KnownInfo = Implementation->ObjCPropertyTable->find(
+      std::make_tuple(Context.Value, *IID, static_cast<char>(Instance)));
+  if (KnownInfo == Implementation->ObjCPropertyTable->end())
+    return llvm::None;
+
+  return {Implementation->SwiftVersion, *KnownInfo};
+}
+
+APINotesReader::VersionedInfo<ObjCMethodInfo>
+APINotesReader::lookupObjCMethodInfo(ContextID Context,
+                                     ObjCSelectorRef Selector, bool Instance) {
+  if (!Implementation->ObjCMethodTable)
+    return llvm::None;
+
+  llvm::Optional<SelectorID> SID = Implementation->getSelector(Selector);
+  if (!SID)
+    return llvm::None;
+
+  auto KnownInfo = Implementation->ObjCMethodTable->find(
+      ObjCMethodTableInfo::internal_key_type{Context.Value, *SID, Instance});
+  if (KnownInfo == Implementation->ObjCMethodTable->end())
+    return llvm::None;
+
+  return {Implementation->SwiftVersion, *KnownInfo};
+}
+
+APINotesReader::VersionedInfo<GlobalVariableInfo>
+APINotesReader::lookupGlobalVariableInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->GlobalVariableTable, Name);
+}
+
+APINotesReader::VersionedInfo<GlobalFunctionInfo>
+APINotesReader::lookupGlobalFunctionInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->GlobalFunctionTable, Name);
+}
+
+APINotesReader::VersionedInfo<EnumConstantInfo>
+APINotesReader::lookupEnumConstantInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->EnumConstantTable, Name);
+}
+
+APINotesReader::VersionedInfo<TagInfo>
+APINotesReader::lookupTagInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->TagTable, Name);
+}
+
+APINotesReader::VersionedInfo<TypedefInfo>
+APINotesReader::lookupTypedefInfo(llvm::StringRef Name) {
+  return Implementation->lookup(Implementation->TypedefTable, Name);
 }
 } // namespace api_notes
 } // namespace clang
