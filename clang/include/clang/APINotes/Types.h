@@ -485,9 +485,9 @@ private:
   static constexpr const unsigned NullabilityKindMask = 0x3;
   static constexpr const unsigned NullabilityKindSize = 2;
 
+public:
   static constexpr const unsigned ReturnInfoIndex = 0;
 
-public:
   // If yes, we consider all types to be non-nullable unless otherwise noted.
   // If this flag is not set, the pointer types are considered to have
   // unknown nullability.
