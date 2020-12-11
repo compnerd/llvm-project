@@ -153,6 +153,29 @@ X86TargetLowering::X86TargetLowering(const X86TargetMachine &TM,
       setLibcallName(LC.Op, LC.Name);
       setLibcallCallingConv(LC.Op, LC.CC);
     }
+
+
+    if (Subtarget.is32Bit()) {
+      static const struct {
+        const RTLIB::Libcall Op;
+        const char * const Name;
+        const CallingConv::ID CC;
+      } LibraryCalls[] = {
+        { RTLIB::FPTOUINT_F32_I32, "_ftoui3", CallingConv::X86_VectorCall },
+        { RTLIB::FPTOSINT_F32_I64, "_ftol3", CallingConv::X86_VectorCall },
+        { RTLIB::FPTOUINT_F32_I64, "_ftoul3", CallingConv::X86_VectorCall },
+        { RTLIB::FPTOUINT_F64_I32, "_dtoui3", CallingConv::X86_VectorCall },
+        { RTLIB::FPTOSINT_F64_I64, "_dtol3", CallingConv::X86_VectorCall },
+        { RTLIB::FPTOUINT_F64_I64, "_dtoul3", CallingConv::X86_VectorCall },
+        { RTLIB::SINTTOFP_I64_F32, "_ltod3", CallingConv::X86_VectorCall },
+        { RTLIB::UINTTOFP_I64_F64, "_ultod3", CallingConv::X86_VectorCall },
+      };
+
+      for (const auto &LC : LibraryCalls) {
+        setLibcallName(LC.Op, LC.Name);
+        setLibcallCallingConv(LC.Op, LC.CC);
+      }
+    }
   }
 
   if (Subtarget.getTargetTriple().isOSMSVCRT()) {
