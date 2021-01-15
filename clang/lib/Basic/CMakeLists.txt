@@ -63,6 +63,7 @@ add_clang_library(clangBasic
   Sanitizers.cpp
   SourceLocation.cpp
   SourceManager.cpp
+  SourceMgrAdapter.cpp
   Stack.cpp
   TargetID.cpp
   TargetInfo.cpp
