@@ -747,6 +747,9 @@ struct ObjCSelectorRef {
   unsigned NumPieces;
   llvm::ArrayRef<llvm::StringRef> Identifiers;
 };
+
+/// The file extension used for the source representation of API notes.
+static const constexpr char SOURCE_APINOTES_EXTENSION[] = "apinotes";
 } // namespace api_notes
 } // namespace clang
 
