@@ -16,6 +16,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 class StringRef;
@@ -133,30 +134,30 @@ enum CPUKind {
 
 /// Parse \p CPU string into a CPUKind. Will only accept 64-bit capable CPUs if
 /// \p Only64Bit is true.
-CPUKind parseArchX86(StringRef CPU, bool Only64Bit = false);
-CPUKind parseTuneCPU(StringRef CPU, bool Only64Bit = false);
+LLVM_SUPPORT_ABI CPUKind parseArchX86(StringRef CPU, bool Only64Bit = false);
+LLVM_SUPPORT_ABI CPUKind parseTuneCPU(StringRef CPU, bool Only64Bit = false);
 
 /// Provide a list of valid CPU names. If \p Only64Bit is true, the list will
 /// only contain 64-bit capable CPUs.
-void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values,
+LLVM_SUPPORT_ABI void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values,
                           bool Only64Bit = false);
 /// Provide a list of valid -mtune names.
-void fillValidTuneCPUList(SmallVectorImpl<StringRef> &Values,
+LLVM_SUPPORT_ABI void fillValidTuneCPUList(SmallVectorImpl<StringRef> &Values,
                           bool Only64Bit = false);
 
 /// Get the key feature prioritizing target multiversioning.
-ProcessorFeatures getKeyFeature(CPUKind Kind);
+LLVM_SUPPORT_ABI ProcessorFeatures getKeyFeature(CPUKind Kind);
 
 /// Fill in the features that \p CPU supports into \p Features.
-void getFeaturesForCPU(StringRef CPU, SmallVectorImpl<StringRef> &Features);
+LLVM_SUPPORT_ABI void getFeaturesForCPU(StringRef CPU, SmallVectorImpl<StringRef> &Features);
 
 /// Set or clear entries in \p Features that are implied to be enabled/disabled
 /// by the provided \p Feature.
-void updateImpliedFeatures(StringRef Feature, bool Enabled,
+LLVM_SUPPORT_ABI void updateImpliedFeatures(StringRef Feature, bool Enabled,
                            StringMap<bool> &Features);
 
-uint64_t getCpuSupportsMask(ArrayRef<StringRef> FeatureStrs);
-unsigned getFeaturePriority(ProcessorFeatures Feat);
+LLVM_SUPPORT_ABI uint64_t getCpuSupportsMask(ArrayRef<StringRef> FeatureStrs);
+LLVM_SUPPORT_ABI unsigned getFeaturePriority(ProcessorFeatures Feat);
 
 } // namespace X86
 } // namespace llvm

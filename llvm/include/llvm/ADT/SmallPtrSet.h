@@ -16,8 +16,10 @@
 
 #include "llvm/ADT/EpochTracker.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/ReverseIteration.h"
 #include "llvm/Support/type_traits.h"
+
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
@@ -46,7 +48,7 @@ namespace llvm {
 /// (-2), to allow deletion.  The hash table is resized when the table is 3/4 or
 /// more.  When this happens, the table is doubled in size.
 ///
-class SmallPtrSetImplBase : public DebugEpochBase {
+class LLVM_SUPPORT_ABI SmallPtrSetImplBase : public DebugEpochBase {
   friend class SmallPtrSetIteratorImpl;
 
 protected:

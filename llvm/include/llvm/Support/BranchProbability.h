@@ -14,6 +14,8 @@
 #define LLVM_SUPPORT_BRANCHPROBABILITY_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -27,7 +29,7 @@ class raw_ostream;
 // no greater than 1. It uses a fixed-point-like implementation, in which the
 // denominator is always a constant value (here we use 1<<31 for maximum
 // precision).
-class BranchProbability {
+class LLVM_SUPPORT_ABI BranchProbability {
   // Numerator
   uint32_t N;
 

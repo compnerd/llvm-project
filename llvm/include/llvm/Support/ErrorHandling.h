@@ -15,6 +15,8 @@
 #define LLVM_SUPPORT_ERRORHANDLING_H
 
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 
 namespace llvm {
@@ -42,11 +44,11 @@ class StringRef;
   ///
   /// \param user_data - An argument which will be passed to the install error
   /// handler.
-  void install_fatal_error_handler(fatal_error_handler_t handler,
+  LLVM_SUPPORT_ABI void install_fatal_error_handler(fatal_error_handler_t handler,
                                    void *user_data = nullptr);
 
   /// Restores default error handling behaviour.
-  void remove_fatal_error_handler();
+  LLVM_SUPPORT_ABI void remove_fatal_error_handler();
 
   /// ScopedFatalErrorHandler - This is a simple helper class which just
   /// calls install_fatal_error_handler in its constructor and
@@ -68,13 +70,13 @@ class StringRef;
 /// standard error, followed by a newline.
 /// After the error handler is called this function will call abort(), it
 /// does not return.
-[[noreturn]] void report_fatal_error(const char *reason,
+[[noreturn]] LLVM_SUPPORT_ABI void report_fatal_error(const char *reason,
                                      bool gen_crash_diag = true);
-[[noreturn]] void report_fatal_error(const std::string &reason,
+[[noreturn]] LLVM_SUPPORT_ABI void report_fatal_error(const std::string &reason,
                                      bool gen_crash_diag = true);
-[[noreturn]] void report_fatal_error(StringRef reason,
+[[noreturn]] LLVM_SUPPORT_ABI void report_fatal_error(StringRef reason,
                                      bool gen_crash_diag = true);
-[[noreturn]] void report_fatal_error(const Twine &reason,
+[[noreturn]] LLVM_SUPPORT_ABI void report_fatal_error(const Twine &reason,
                                      bool gen_crash_diag = true);
 
 /// Installs a new bad alloc error handler that should be used whenever a
@@ -113,13 +115,13 @@ void install_out_of_memory_new_handler();
 /// If no error handler is installed (default), throws a bad_alloc exception
 /// if LLVM is compiled with exception support. Otherwise prints the error
 /// to standard error and calls abort().
-[[noreturn]] void report_bad_alloc_error(const char *Reason,
+[[noreturn]] LLVM_SUPPORT_ABI void report_bad_alloc_error(const char *Reason,
                                          bool GenCrashDiag = true);
 
 /// This function calls abort(), and prints the optional message to stderr.
 /// Use the llvm_unreachable macro (that adds location info), instead of
 /// calling this function directly.
-[[noreturn]] void
+[[noreturn]] LLVM_SUPPORT_ABI void
 llvm_unreachable_internal(const char *msg = nullptr, const char *file = nullptr,
                           unsigned line = 0);
 }

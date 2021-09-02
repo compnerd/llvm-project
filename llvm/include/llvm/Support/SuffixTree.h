@@ -15,6 +15,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <vector>
 
 namespace llvm {
@@ -134,7 +136,7 @@ struct SuffixTreeNode {
 /// paper is available at
 ///
 /// https://www.cs.helsinki.fi/u/ukkonen/SuffixT1withFigs.pdf
-class SuffixTree {
+class LLVM_SUPPORT_ABI SuffixTree {
 public:
   /// Each element is an integer representing an instruction in the module.
   llvm::ArrayRef<unsigned> Str;

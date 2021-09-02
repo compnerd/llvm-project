@@ -30,6 +30,8 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <array>
 #include <cstdint>
 
@@ -38,9 +40,9 @@ namespace llvm {
 template <unsigned N> class SmallString;
 template <typename T> class ArrayRef;
 
-class MD5 {
+class LLVM_SUPPORT_ABI MD5 {
 public:
-  struct MD5Result {
+  struct LLVM_SUPPORT_ABI MD5Result {
     std::array<uint8_t, 16> Bytes;
 
     operator std::array<uint8_t, 16>() const { return Bytes; }

@@ -14,6 +14,8 @@
 #define LLVM_SUPPORT_MEMORY_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <system_error>
 
 namespace llvm {
@@ -49,7 +51,7 @@ namespace sys {
   /// MemoryBlock instances.
   /// @since 1.4
   /// An abstraction for memory operations.
-  class Memory {
+  class LLVM_SUPPORT_ABI Memory {
   public:
     enum ProtectionFlags {
       MF_READ = 0x1000000,
@@ -161,7 +163,7 @@ namespace sys {
 
 #ifndef NDEBUG
   /// Debugging output for Memory::ProtectionFlags.
-  raw_ostream &operator<<(raw_ostream &OS, const Memory::ProtectionFlags &PF);
+  LLVM_SUPPORT_ABI raw_ostream &operator<<(raw_ostream &OS, const Memory::ProtectionFlags &PF);
 
   /// Debugging output for MemoryBlock.
   raw_ostream &operator<<(raw_ostream &OS, const MemoryBlock &MB);

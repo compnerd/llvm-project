@@ -11,6 +11,7 @@
 
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/FormatProviders.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 #include <chrono>
 #include <ctime>
@@ -56,6 +57,7 @@ toTimePoint(std::time_t T, uint32_t nsec) {
 
 } // namespace sys
 
+LLVM_SUPPORT_ABI
 raw_ostream &operator<<(raw_ostream &OS, sys::TimePoint<> TP);
 
 /// Format provider for TimePoint<>
@@ -67,7 +69,7 @@ raw_ostream &operator<<(raw_ostream &OS, sys::TimePoint<> TP);
 ///
 /// If no options are given, the default format is "%Y-%m-%d %H:%M:%S.%N".
 template <>
-struct format_provider<sys::TimePoint<>> {
+struct LLVM_SUPPORT_ABI format_provider<sys::TimePoint<>> {
   static void format(const sys::TimePoint<> &TP, llvm::raw_ostream &OS,
                      StringRef Style);
 };
@@ -76,12 +78,12 @@ namespace detail {
 template <typename Period> struct unit { static const char value[]; };
 template <typename Period> const char unit<Period>::value[] = "";
 
-template <> struct unit<std::ratio<3600>> { static const char value[]; };
-template <> struct unit<std::ratio<60>> { static const char value[]; };
-template <> struct unit<std::ratio<1>> { static const char value[]; };
-template <> struct unit<std::milli> { static const char value[]; };
-template <> struct unit<std::micro> { static const char value[]; };
-template <> struct unit<std::nano> { static const char value[]; };
+template <> struct LLVM_SUPPORT_ABI unit<std::ratio<3600>> { static const char value[]; };
+template <> struct LLVM_SUPPORT_ABI unit<std::ratio<60>> { static const char value[]; };
+template <> struct LLVM_SUPPORT_ABI unit<std::ratio<1>> { static const char value[]; };
+template <> struct LLVM_SUPPORT_ABI unit<std::milli> { static const char value[]; };
+template <> struct LLVM_SUPPORT_ABI unit<std::micro> { static const char value[]; };
+template <> struct LLVM_SUPPORT_ABI unit<std::nano> { static const char value[]; };
 } // namespace detail
 
 /// Implementation of format_provider<T> for duration types.

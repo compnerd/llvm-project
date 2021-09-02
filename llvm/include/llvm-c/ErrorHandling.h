@@ -15,6 +15,7 @@
 #define LLVM_C_ERRORHANDLING_H
 
 #include "llvm-c/ExternC.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 LLVM_C_EXTERN_C_BEGIN
 
@@ -40,7 +41,7 @@ void LLVMResetFatalErrorHandler(void);
  * signals and prints which component of LLVM you were in at the time if the
  * crash.
  */
-void LLVMEnablePrettyStackTrace(void);
+LLVM_SUPPORT_ABI void LLVMEnablePrettyStackTrace(void);
 
 LLVM_C_EXTERN_C_END
 

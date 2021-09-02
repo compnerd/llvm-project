@@ -12,6 +12,8 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <cassert>
 #include <string>
 #include <utility>
@@ -23,7 +25,7 @@ class Timer;
 class TimerGroup;
 class raw_ostream;
 
-class TimeRecord {
+class LLVM_SUPPORT_ABI TimeRecord {
   double WallTime;               ///< Wall clock time elapsed in seconds.
   double UserTime;               ///< User time elapsed.
   double SystemTime;             ///< System time elapsed.
@@ -79,7 +81,7 @@ public:
 /// when the last timer is destroyed, otherwise it is printed when its
 /// TimerGroup is destroyed.  Timers do not print their information if they are
 /// never started.
-class Timer {
+class LLVM_SUPPORT_ABI Timer {
   TimeRecord Time;          ///< The total time captured.
   TimeRecord StartTime;     ///< The time startTimer() was last called.
   std::string Name;         ///< The name of this time variable.
@@ -143,7 +145,7 @@ private:
 /// stopTimer() methods of the Timer class.  When the object is constructed, it
 /// starts the timer specified as its argument.  When it is destroyed, it stops
 /// the relevant timer.  This makes it easy to time a region of code.
-class TimeRegion {
+class LLVM_SUPPORT_ABI TimeRegion {
   Timer *T;
   TimeRegion(const TimeRegion &) = delete;
 
@@ -163,7 +165,7 @@ public:
 /// you to declare a new timer, AND specify the region to time, all in one
 /// statement.  All timers with the same name are merged.  This is primarily
 /// used for debugging and for hunting performance problems.
-struct NamedRegionTimer : public TimeRegion {
+struct LLVM_SUPPORT_ABI NamedRegionTimer : public TimeRegion {
   explicit NamedRegionTimer(StringRef Name, StringRef Description,
                             StringRef GroupName,
                             StringRef GroupDescription, bool Enabled = true);
@@ -173,7 +175,7 @@ struct NamedRegionTimer : public TimeRegion {
 /// report that is printed when the TimerGroup is destroyed.  It is illegal to
 /// destroy a TimerGroup object before all of the Timers in it are gone.  A
 /// TimerGroup can be specified for a newly created timer in its constructor.
-class TimerGroup {
+class LLVM_SUPPORT_ABI TimerGroup {
   struct PrintRecord {
     TimeRecord Time;
     std::string Name;
@@ -243,7 +245,7 @@ public:
 
 private:
   friend class Timer;
-  friend void PrintStatisticsJSON(raw_ostream &OS);
+  friend LLVM_SUPPORT_ABI void PrintStatisticsJSON(raw_ostream &OS);
   void addTimer(Timer &T);
   void removeTimer(Timer &T);
   void prepareToPrintList(bool reset_time = false);

@@ -18,6 +18,7 @@
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/Config/llvm-config.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 #ifdef _WIN32
 typedef unsigned long DWORD;
@@ -35,7 +36,7 @@ namespace llvm {
 
 /// LLVM thread following std::thread interface with added constructor to
 /// specify stack size.
-class thread {
+class LLVM_SUPPORT_ABI thread {
   template <typename FPtr, typename... Args, size_t... Indices>
   static void Apply(std::tuple<FPtr, Args...> &Callee,
                     std::index_sequence<Indices...>) {
@@ -118,11 +119,14 @@ private:
   native_handle_type Thread;
 };
 
-thread::native_handle_type
+LLVM_SUPPORT_ABI thread::native_handle_type
 llvm_execute_on_thread_impl(thread::start_routine_type ThreadFunc, void *Arg,
                             llvm::Optional<unsigned> StackSizeInBytes);
-void llvm_thread_join_impl(thread::native_handle_type Thread);
-void llvm_thread_detach_impl(thread::native_handle_type Thread);
+
+LLVM_SUPPORT_ABI void llvm_thread_join_impl(thread::native_handle_type Thread);
+
+LLVM_SUPPORT_ABI void llvm_thread_detach_impl(thread::native_handle_type Thread);
+
 thread::id llvm_thread_get_id_impl(thread::native_handle_type Thread);
 thread::id llvm_thread_get_current_id_impl();
 

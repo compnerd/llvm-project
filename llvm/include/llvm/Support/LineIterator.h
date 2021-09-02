@@ -12,7 +12,9 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MemoryBufferRef.h"
+
 #include <iterator>
 
 namespace llvm {
@@ -30,7 +32,7 @@ class MemoryBuffer;
 /// character.
 ///
 /// Note that this iterator requires the buffer to be nul terminated.
-class line_iterator {
+class LLVM_SUPPORT_ABI line_iterator {
   Optional<MemoryBufferRef> Buffer;
   char CommentMarker = '\0';
   bool SkipBlanks = true;

@@ -16,8 +16,10 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MemAlloc.h"
 #include "llvm/Support/type_traits.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -59,12 +61,12 @@ protected:
   /// This is a helper for \a grow() that's out of line to reduce code
   /// duplication.  This function will report a fatal error if it can't grow at
   /// least to \p MinSize.
-  void *mallocForGrow(size_t MinSize, size_t TSize, size_t &NewCapacity);
+  LLVM_SUPPORT_ABI void *mallocForGrow(size_t MinSize, size_t TSize, size_t &NewCapacity);
 
   /// This is an implementation of the grow() method which only works
   /// on POD-like data types and is out of line to reduce code duplication.
   /// This function will report a fatal error if it cannot increase capacity.
-  void grow_pod(void *FirstEl, size_t MinSize, size_t TSize);
+  LLVM_SUPPORT_ABI void grow_pod(void *FirstEl, size_t MinSize, size_t TSize);
 
 public:
   size_t size() const { return Size; }
@@ -86,6 +88,11 @@ public:
     Size = N;
   }
 };
+
+extern template class SmallVectorBase<uint32_t>;
+#if SIZE_MAX > UINT32_MAX
+extern template class SmallVectorBase<uint64_t>;
+#endif
 
 template <class T>
 using SmallVectorSizeType =

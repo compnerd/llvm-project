@@ -16,6 +16,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 /// FileOutputBuffer - This interface provides simple way to create an in-memory
@@ -25,7 +26,7 @@ namespace llvm {
 /// If the FileOutputBuffer is committed, the target file's content will become
 /// the buffer content at the time of the commit.  If the FileOutputBuffer is
 /// not committed, the file will be deleted in the FileOutputBuffer destructor.
-class FileOutputBuffer {
+class LLVM_SUPPORT_ABI FileOutputBuffer {
 public:
   enum {
     /// Set the 'x' bit on the resulting file.

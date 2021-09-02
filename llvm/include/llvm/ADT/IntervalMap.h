@@ -108,7 +108,9 @@
 #include "llvm/ADT/bit.h"
 #include "llvm/Support/AlignOf.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/RecyclingAllocator.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -413,6 +415,7 @@ void adjustSiblingSizes(NodeT *Node[], unsigned Nodes,
 /// @param Position Insert position.
 /// @param Grow     Reserve space for a new element at Position.
 /// @return         (node, offset) for Position.
+LLVM_SUPPORT_ABI
 IdxPair distribute(unsigned Nodes, unsigned Elements, unsigned Capacity,
                    const unsigned *CurSize, unsigned NewSize[],
                    unsigned Position, bool Grow);
@@ -492,7 +495,7 @@ struct NodeSizer {
 //
 //===----------------------------------------------------------------------===//
 
-class NodeRef {
+class LLVM_SUPPORT_ABI NodeRef {
   struct CacheAlignedPointerTraits {
     static inline void *getAsVoidPointer(void *P) { return P; }
     static inline void *getFromVoidPointer(void *P) { return P; }
@@ -772,7 +775,7 @@ public:
 //
 //===----------------------------------------------------------------------===//
 
-class Path {
+class LLVM_SUPPORT_ABI Path {
   /// Entry - Each step in the path is a node pointer and an offset into that
   /// node.
   struct Entry {

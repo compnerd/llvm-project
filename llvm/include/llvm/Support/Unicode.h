@@ -14,6 +14,8 @@
 #ifndef LLVM_SUPPORT_UNICODE_H
 #define LLVM_SUPPORT_UNICODE_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 namespace llvm {
 class StringRef;
 
@@ -41,7 +43,7 @@ enum ColumnWidthErrors {
 ///   * surrogates (category = Cs);
 ///   * unassigned characters (category = Cn).
 /// \return true if the character is considered printable.
-bool isPrintable(int UCS);
+LLVM_SUPPORT_ABI bool isPrintable(int UCS);
 
 /// Gets the number of positions the UTF8-encoded \p Text is likely to occupy
 /// when output on a terminal ("character width"). This depends on the
@@ -57,7 +59,7 @@ bool isPrintable(int UCS);
 ///   * 0 for each non-spacing and enclosing combining mark;
 ///   * 2 for each CJK character excluding halfwidth forms;
 ///   * 1 for each of the remaining characters.
-int columnWidthUTF8(StringRef Text);
+LLVM_SUPPORT_ABI int columnWidthUTF8(StringRef Text);
 
 /// Fold input unicode character according the Simple unicode case folding
 /// rules.

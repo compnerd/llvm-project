@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormatVariadicDetails.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/NativeFormatting.h"
 
 #include <type_traits>

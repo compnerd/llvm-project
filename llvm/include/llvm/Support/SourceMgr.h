@@ -16,8 +16,10 @@
 #define LLVM_SUPPORT_SOURCEMGR_H
 
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SMLoc.h"
+
 #include <vector>
 
 namespace llvm {
@@ -28,7 +30,7 @@ class SMFixIt;
 
 /// This owns the files read by a parser, handles include stacks,
 /// and handles diagnostic wrangling.
-class SourceMgr {
+class LLVM_SUPPORT_ABI SourceMgr {
 public:
   enum DiagKind {
     DK_Error,
@@ -43,7 +45,7 @@ public:
   using DiagHandlerTy = void (*)(const SMDiagnostic &, void *Context);
 
 private:
-  struct SrcBuffer {
+  struct LLVM_SUPPORT_ABI SrcBuffer {
     /// The memory buffer for the file.
     std::unique_ptr<MemoryBuffer> Buffer;
 
@@ -223,7 +225,7 @@ public:
 };
 
 /// Represents a single fixit, a replacement of one range of text with another.
-class SMFixIt {
+class LLVM_SUPPORT_ABI SMFixIt {
   SMRange Range;
 
   std::string Text;
@@ -248,7 +250,7 @@ public:
 
 /// Instances of this class encapsulate one diagnostic report, allowing
 /// printing to a raw_ostream as a caret diagnostic.
-class SMDiagnostic {
+class LLVM_SUPPORT_ABI SMDiagnostic {
   const SourceMgr *SM = nullptr;
   SMLoc Loc;
   std::string Filename;

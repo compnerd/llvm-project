@@ -10,10 +10,11 @@
 #define LLVM_SUPPORT_RISCVATTRIBUTEPARSER_H
 
 #include "llvm/Support/ELFAttributeParser.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/RISCVAttributes.h"
 
 namespace llvm {
-class RISCVAttributeParser : public ELFAttributeParser {
+class LLVM_SUPPORT_ABI RISCVAttributeParser : public ELFAttributeParser {
   struct DisplayHandler {
     RISCVAttrs::AttrType attribute;
     Error (RISCVAttributeParser::*routine)(unsigned);

@@ -60,6 +60,8 @@
 #ifndef LLVM_SUPPORT_EXTENSIBLERTTI_H
 #define LLVM_SUPPORT_EXTENSIBLERTTI_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 namespace llvm {
 
 template <typename ThisT, typename ParentT> class RTTIExtends;
@@ -68,7 +70,7 @@ template <typename ThisT, typename ParentT> class RTTIExtends;
 ///
 /// This class defines virtual methods, dynamicClassID and isA, that enable
 /// type comparisons.
-class RTTIRoot {
+class LLVM_SUPPORT_ABI RTTIRoot {
 public:
   virtual ~RTTIRoot() = default;
 

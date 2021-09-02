@@ -17,6 +17,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ARMTargetParser.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <vector>
 
 // FIXME:This should be made into class design,to avoid dupplication.
@@ -111,31 +113,31 @@ const ArchKind ArchKinds[] = {
 };
 
 // FIXME: These should be moved to TargetTuple once it exists
-bool getExtensionFeatures(uint64_t Extensions,
+LLVM_SUPPORT_ABI bool getExtensionFeatures(uint64_t Extensions,
                           std::vector<StringRef> &Features);
-bool getArchFeatures(ArchKind AK, std::vector<StringRef> &Features);
+LLVM_SUPPORT_ABI bool getArchFeatures(ArchKind AK, std::vector<StringRef> &Features);
 
-StringRef getArchName(ArchKind AK);
-unsigned getArchAttr(ArchKind AK);
-StringRef getCPUAttr(ArchKind AK);
-StringRef getSubArch(ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getArchName(ArchKind AK);
+LLVM_SUPPORT_ABI unsigned getArchAttr(ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getCPUAttr(ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getSubArch(ArchKind AK);
 StringRef getArchExtName(unsigned ArchExtKind);
-StringRef getArchExtFeature(StringRef ArchExt);
+LLVM_SUPPORT_ABI StringRef getArchExtFeature(StringRef ArchExt);
 
 // Information by Name
-unsigned getDefaultFPU(StringRef CPU, ArchKind AK);
-uint64_t getDefaultExtensions(StringRef CPU, ArchKind AK);
-StringRef getDefaultCPU(StringRef Arch);
-ArchKind getCPUArchKind(StringRef CPU);
+LLVM_SUPPORT_ABI unsigned getDefaultFPU(StringRef CPU, ArchKind AK);
+LLVM_SUPPORT_ABI uint64_t getDefaultExtensions(StringRef CPU, ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getDefaultCPU(StringRef Arch);
+LLVM_SUPPORT_ABI ArchKind getCPUArchKind(StringRef CPU);
 
 // Parser
-ArchKind parseArch(StringRef Arch);
-ArchExtKind parseArchExt(StringRef ArchExt);
-ArchKind parseCPUArch(StringRef CPU);
+LLVM_SUPPORT_ABI ArchKind parseArch(StringRef Arch);
+LLVM_SUPPORT_ABI ArchExtKind parseArchExt(StringRef ArchExt);
+LLVM_SUPPORT_ABI ArchKind parseCPUArch(StringRef CPU);
 // Used by target parser tests
-void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values);
+LLVM_SUPPORT_ABI void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values);
 
-bool isX18ReservedByDefault(const Triple &TT);
+LLVM_SUPPORT_ABI bool isX18ReservedByDefault(const Triple &TT);
 
 struct ParsedBranchProtection {
   StringRef Scope;
@@ -143,7 +145,7 @@ struct ParsedBranchProtection {
   bool BranchTargetEnforcement;
 };
 
-bool parseBranchProtection(StringRef Spec, ParsedBranchProtection &PBP,
+LLVM_SUPPORT_ABI bool parseBranchProtection(StringRef Spec, ParsedBranchProtection &PBP,
                            StringRef &Err);
 
 } // namespace AArch64

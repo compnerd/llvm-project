@@ -11,6 +11,7 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 #include <string>
 
@@ -24,7 +25,7 @@ enum class stream_error_code {
 };
 
 /// Base class for errors originating when parsing raw PDB files
-class BinaryStreamError : public ErrorInfo<BinaryStreamError> {
+class LLVM_SUPPORT_ABI BinaryStreamError : public ErrorInfo<BinaryStreamError> {
 public:
   static char ID;
   explicit BinaryStreamError(stream_error_code C);

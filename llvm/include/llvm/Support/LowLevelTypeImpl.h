@@ -28,7 +28,9 @@
 
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MachineValueType.h"
+
 #include <cassert>
 
 namespace llvm {
@@ -37,7 +39,7 @@ class DataLayout;
 class Type;
 class raw_ostream;
 
-class LLT {
+class LLVM_SUPPORT_ABI LLT {
 public:
   /// Get a low-level scalar or aggregate "bag of bits".
   static LLT scalar(unsigned SizeInBits) {

@@ -29,7 +29,9 @@
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/Program.h"
+
 #include <system_error>
 
 namespace llvm {
@@ -41,7 +43,7 @@ namespace sys {
 
 /// A collection of legacy interfaces for querying information about the
 /// current executing process.
-class Process {
+class LLVM_SUPPORT_ABI Process {
 public:
   using Pid = int32_t;
 
@@ -219,7 +221,6 @@ public:
 private:
   [[noreturn]] static void ExitNoCleanup(int RetCode);
 };
-
 }
 }
 

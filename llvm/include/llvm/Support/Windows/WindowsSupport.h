@@ -42,7 +42,9 @@
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/VersionTuple.h"
+
 #include <cassert>
 #include <string>
 #include <system_error>
@@ -239,7 +241,7 @@ std::error_code GetCommandLineArguments(SmallVectorImpl<const char *> &Args,
 
 /// Convert UTF-8 path to a suitable UTF-16 path for use with the Win32 Unicode
 /// File API.
-std::error_code widenPath(const Twine &Path8, SmallVectorImpl<wchar_t> &Path16,
+LLVM_SUPPORT_ABI std::error_code widenPath(const Twine &Path8, SmallVectorImpl<wchar_t> &Path16,
                           size_t MaxPathLen = MAX_PATH);
 
 } // end namespace windows

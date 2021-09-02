@@ -14,12 +14,13 @@
 #define LLVM_SUPPORT_MEMORYBUFFERREF_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 
 class MemoryBuffer;
 
-class MemoryBufferRef {
+class LLVM_SUPPORT_ABI MemoryBufferRef {
   StringRef Buffer;
   StringRef Identifier;
 

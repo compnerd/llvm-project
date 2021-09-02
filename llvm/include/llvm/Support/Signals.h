@@ -14,6 +14,8 @@
 #ifndef LLVM_SUPPORT_SIGNALS_H
 #define LLVM_SUPPORT_SIGNALS_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 
 namespace llvm {
@@ -24,12 +26,12 @@ namespace sys {
 
   /// This function runs all the registered interrupt handlers, including the
   /// removal of files registered by RemoveFileOnSignal.
-  void RunInterruptHandlers();
+  LLVM_SUPPORT_ABI void RunInterruptHandlers();
 
   /// This function registers signal handlers to ensure that if a signal gets
   /// delivered that the named file is removed.
   /// Remove a file if a fatal signal occurs.
-  bool RemoveFileOnSignal(StringRef Filename, std::string* ErrMsg = nullptr);
+  LLVM_SUPPORT_ABI bool RemoveFileOnSignal(StringRef Filename, std::string* ErrMsg = nullptr);
 
   /// This function removes a file from the list of files to be removed on
   /// signal delivery.
@@ -43,16 +45,16 @@ namespace sys {
   ///        StringRef(), in which case we will only search $PATH.
   /// \param DisableCrashReporting if \c true, disable the normal crash
   ///        reporting mechanisms on the underlying operating system.
-  void PrintStackTraceOnErrorSignal(StringRef Argv0,
+  LLVM_SUPPORT_ABI void PrintStackTraceOnErrorSignal(StringRef Argv0,
                                     bool DisableCrashReporting = false);
 
   /// Disable all system dialog boxes that appear when the process crashes.
-  void DisableSystemDialogsOnCrash();
+  LLVM_SUPPORT_ABI void DisableSystemDialogsOnCrash();
 
   /// Print the stack trace using the given \c raw_ostream object.
   /// \param Depth refers to the number of stackframes to print. If not
   ///        specified, the entire frame is printed.
-  void PrintStackTrace(raw_ostream &OS, int Depth = 0);
+  LLVM_SUPPORT_ABI void PrintStackTrace(raw_ostream &OS, int Depth = 0);
 
   // Run all registered signal handlers.
   void RunSignalHandlers();
@@ -62,7 +64,7 @@ namespace sys {
   /// Add a function to be called when an abort/kill signal is delivered to the
   /// process. The handler can have a cookie passed to it to identify what
   /// instance of the handler it is.
-  void AddSignalHandler(SignalHandlerCallback FnPtr, void *Cookie);
+  LLVM_SUPPORT_ABI void AddSignalHandler(SignalHandlerCallback FnPtr, void *Cookie);
 
   /// This function registers a function to be called when the user "interrupts"
   /// the program (typically by pressing ctrl-c).  When the user interrupts the
@@ -73,7 +75,7 @@ namespace sys {
   /// functions.  An null interrupt function pointer disables the current
   /// installed function.  Note also that the handler may be executed on a
   /// different thread on some platforms.
-  void SetInterruptFunction(void (*IF)());
+  LLVM_SUPPORT_ABI void SetInterruptFunction(void (*IF)());
 
   /// Registers a function to be called when an "info" signal is delivered to
   /// the process.

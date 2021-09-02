@@ -28,6 +28,8 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -35,7 +37,7 @@
 namespace llvm {
 class StringRef;
 
-class TrigramIndex {
+class LLVM_SUPPORT_ABI TrigramIndex {
  public:
   /// Inserts a new Regex into the index.
   void insert(const std::string &Regex);

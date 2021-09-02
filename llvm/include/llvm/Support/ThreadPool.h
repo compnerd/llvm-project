@@ -14,6 +14,7 @@
 #define LLVM_SUPPORT_THREADPOOL_H
 
 #include "llvm/Config/llvm-config.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/thread.h"
 
@@ -34,7 +35,7 @@ namespace llvm {
 ///
 /// The pool keeps a vector of threads alive, waiting on a condition variable
 /// for some work to become available.
-class ThreadPool {
+class LLVM_SUPPORT_ABI ThreadPool {
 public:
   using TaskTy = std::function<void()>;
   using PackagedTaskTy = std::packaged_task<void()>;

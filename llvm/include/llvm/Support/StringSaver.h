@@ -13,12 +13,13 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 
 /// Saves strings in the provided stable storage and returns a
 /// StringRef with a stable character pointer.
-class StringSaver final {
+class LLVM_SUPPORT_ABI StringSaver final {
   BumpPtrAllocator &Alloc;
 
 public:
@@ -39,7 +40,7 @@ public:
 ///
 /// Compared to StringPool, it performs fewer allocations but doesn't support
 /// refcounting/deletion.
-class UniqueStringSaver final {
+class LLVM_SUPPORT_ABI UniqueStringSaver final {
   StringSaver Strings;
   llvm::DenseSet<llvm::StringRef> Unique;
 

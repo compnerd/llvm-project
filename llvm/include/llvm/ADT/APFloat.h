@@ -20,6 +20,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <memory>
 
 #define APFLOAT_DISPATCH_ON_SEMANTICS(METHOD_CALL)                             \
@@ -140,7 +142,7 @@ enum lostFraction { // Example of truncated bits:
 // This is the common type definitions shared by APFloat and its internal
 // implementation classes. This struct should not define any non-static data
 // members.
-struct APFloatBase {
+struct LLVM_SUPPORT_ABI APFloatBase {
   typedef APInt::WordType integerPart;
   static constexpr unsigned integerPartWidth = APInt::APINT_BITS_PER_WORD;
 
@@ -244,7 +246,7 @@ struct APFloatBase {
 
 namespace detail {
 
-class IEEEFloat final : public APFloatBase {
+class LLVM_SUPPORT_ABI IEEEFloat final : public APFloatBase {
 public:
   /// \name Constructors
   /// @{
@@ -404,7 +406,7 @@ public:
   /// emphasizes producing different codes for different inputs in order to
   /// be used in canonicalization and memoization. As such, equality is
   /// bitwiseIsEqual, and 0 != -0.
-  friend hash_code hash_value(const IEEEFloat &Arg);
+  friend LLVM_SUPPORT_ABI hash_code hash_value(const IEEEFloat &Arg);
 
   /// Converts this value into a decimal string.
   ///
@@ -448,12 +450,12 @@ public:
   ///   0   -> \c IEK_Zero
   ///   Inf -> \c IEK_Inf
   ///
-  friend int ilogb(const IEEEFloat &Arg);
+  friend LLVM_SUPPORT_ABI int ilogb(const IEEEFloat &Arg);
 
   /// Returns: X * 2^Exp for integral exponents.
-  friend IEEEFloat scalbn(IEEEFloat X, int Exp, roundingMode);
+  friend LLVM_SUPPORT_ABI IEEEFloat scalbn(IEEEFloat X, int Exp, roundingMode);
 
-  friend IEEEFloat frexp(const IEEEFloat &X, int &Exp, roundingMode);
+  friend LLVM_SUPPORT_ABI IEEEFloat frexp(const IEEEFloat &X, int &Exp, roundingMode);
 
   /// \name Special value setters.
   /// @{
@@ -590,16 +592,16 @@ private:
   unsigned int sign : 1;
 };
 
-hash_code hash_value(const IEEEFloat &Arg);
-int ilogb(const IEEEFloat &Arg);
-IEEEFloat scalbn(IEEEFloat X, int Exp, IEEEFloat::roundingMode);
-IEEEFloat frexp(const IEEEFloat &Val, int &Exp, IEEEFloat::roundingMode RM);
+LLVM_SUPPORT_ABI hash_code hash_value(const IEEEFloat &Arg);
+LLVM_SUPPORT_ABI int ilogb(const IEEEFloat &Arg);
+LLVM_SUPPORT_ABI IEEEFloat scalbn(IEEEFloat X, int Exp, IEEEFloat::roundingMode);
+LLVM_SUPPORT_ABI IEEEFloat frexp(const IEEEFloat &Val, int &Exp, IEEEFloat::roundingMode RM);
 
 // This mode implements more precise float in terms of two APFloats.
 // The interface and layout is designed for arbitrary underlying semantics,
 // though currently only PPCDoubleDouble semantics are supported, whose
 // corresponding underlying semantics are IEEEdouble.
-class DoubleAPFloat final : public APFloatBase {
+class LLVM_SUPPORT_ABI DoubleAPFloat final : public APFloatBase {
   // Note: this must be the first data member.
   const fltSemantics *Semantics;
   std::unique_ptr<APFloat[]> Floats;
@@ -687,8 +689,8 @@ public:
 
   bool getExactInverse(APFloat *inv) const;
 
-  friend DoubleAPFloat scalbn(const DoubleAPFloat &X, int Exp, roundingMode);
-  friend DoubleAPFloat frexp(const DoubleAPFloat &X, int &Exp, roundingMode);
+  friend LLVM_SUPPORT_ABI DoubleAPFloat scalbn(const DoubleAPFloat &X, int Exp, roundingMode);
+  friend LLVM_SUPPORT_ABI DoubleAPFloat frexp(const DoubleAPFloat &X, int &Exp, roundingMode);
   friend hash_code hash_value(const DoubleAPFloat &Arg);
 };
 
@@ -698,7 +700,7 @@ hash_code hash_value(const DoubleAPFloat &Arg);
 
 // This is a interface class that is currently forwarding functionalities from
 // detail::IEEEFloat.
-class APFloat : public APFloatBase {
+class LLVM_SUPPORT_ABI APFloat : public APFloatBase {
   typedef detail::IEEEFloat IEEEFloat;
   typedef detail::DoubleAPFloat DoubleAPFloat;
 
@@ -1248,7 +1250,7 @@ public:
     APFLOAT_DISPATCH_ON_SEMANTICS(getExactInverse(inv));
   }
 
-  friend hash_code hash_value(const APFloat &Arg);
+  friend LLVM_SUPPORT_ABI hash_code hash_value(const APFloat &Arg);
   friend int ilogb(const APFloat &Arg) { return ilogb(Arg.getIEEE()); }
   friend APFloat scalbn(APFloat X, int Exp, roundingMode RM);
   friend APFloat frexp(const APFloat &X, int &Exp, roundingMode RM);
@@ -1260,7 +1262,8 @@ public:
 ///
 /// These additional declarations are required in order to compile LLVM with IBM
 /// xlC compiler.
-hash_code hash_value(const APFloat &Arg);
+LLVM_SUPPORT_ABI hash_code hash_value(const APFloat &Arg);
+
 inline APFloat scalbn(APFloat X, int Exp, APFloat::roundingMode RM) {
   if (APFloat::usesLayout<detail::IEEEFloat>(X.getSemantics()))
     return APFloat(scalbn(X.U.IEEE, Exp, RM), X.getSemantics());

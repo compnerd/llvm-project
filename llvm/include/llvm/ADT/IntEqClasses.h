@@ -21,10 +21,11 @@
 #define LLVM_ADT_INTEQCLASSES_H
 
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 
-class IntEqClasses {
+class LLVM_SUPPORT_ABI IntEqClasses {
   /// EC - When uncompressed, map each integer to a smaller member of its
   /// equivalence class. The class leader is the smallest member and maps to
   /// itself.

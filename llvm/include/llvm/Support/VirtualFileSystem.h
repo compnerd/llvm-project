@@ -22,8 +22,10 @@
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
+
 #include <cassert>
 #include <cstdint>
 #include <ctime>
@@ -43,7 +45,7 @@ class Twine;
 namespace vfs {
 
 /// The result of a \p status operation.
-class Status {
+class LLVM_SUPPORT_ABI Status {
   std::string Name;
   llvm::sys::fs::UniqueID UID;
   llvm::sys::TimePoint<> MTime;
@@ -96,7 +98,7 @@ public:
 };
 
 /// Represents an open file.
-class File {
+class LLVM_SUPPORT_ABI File {
 public:
   /// Destroy the file after closing it (if open).
   /// Sub-classes should generally call close() inside their destructors.  We
@@ -142,7 +144,7 @@ namespace detail {
 
 /// An interface for virtual file systems to provide an iterator over the
 /// (non-recursive) contents of a directory.
-struct DirIterImpl {
+struct LLVM_SUPPORT_ABI DirIterImpl {
   virtual ~DirIterImpl();
 
   /// Sets \c CurrentEntry to the next entry in the directory on success,
@@ -206,7 +208,7 @@ struct RecDirIterState {
 
 /// An input iterator over the recursive contents of a virtual path,
 /// similar to llvm::sys::fs::recursive_directory_iterator.
-class recursive_directory_iterator {
+class LLVM_SUPPORT_ABI recursive_directory_iterator {
   FileSystem *FS;
   std::shared_ptr<detail::RecDirIterState>
       State; // Input iterator semantics on copy.
@@ -242,7 +244,7 @@ public:
 };
 
 /// The virtual file system interface.
-class FileSystem : public llvm::ThreadSafeRefCountedBase<FileSystem> {
+class LLVM_SUPPORT_ABI FileSystem : public llvm::ThreadSafeRefCountedBase<FileSystem> {
 public:
   virtual ~FileSystem();
 
@@ -301,13 +303,13 @@ public:
 /// the operating system.
 /// The working directory is linked to the process's working directory.
 /// (This is usually thread-hostile).
-IntrusiveRefCntPtr<FileSystem> getRealFileSystem();
+LLVM_SUPPORT_ABI IntrusiveRefCntPtr<FileSystem> getRealFileSystem();
 
 /// Create an \p vfs::FileSystem for the 'real' file system, as seen by
 /// the operating system.
 /// It has its own working directory, independent of (but initially equal to)
 /// that of the process.
-std::unique_ptr<FileSystem> createPhysicalFileSystem();
+LLVM_SUPPORT_ABI std::unique_ptr<FileSystem> createPhysicalFileSystem();
 
 /// A file system that allows overlaying one \p AbstractFileSystem on top
 /// of another.
@@ -319,7 +321,7 @@ std::unique_ptr<FileSystem> createPhysicalFileSystem();
 /// top-most (most recently added) directory are used.  When there is a file
 /// that exists in more than one file system, the file in the top-most file
 /// system overrides the other(s).
-class OverlayFileSystem : public FileSystem {
+class LLVM_SUPPORT_ABI OverlayFileSystem : public FileSystem {
   using FileSystemList = SmallVector<IntrusiveRefCntPtr<FileSystem>, 1>;
 
   /// The stack of file systems, implemented as a list in order of
@@ -367,7 +369,7 @@ public:
 /// By default, this delegates all calls to the underlying file system. This
 /// is useful when derived file systems want to override some calls and still
 /// proxy other calls.
-class ProxyFileSystem : public FileSystem {
+class LLVM_SUPPORT_ABI ProxyFileSystem : public FileSystem {
 public:
   explicit ProxyFileSystem(IntrusiveRefCntPtr<FileSystem> FS)
       : FS(std::move(FS)) {}
@@ -413,7 +415,7 @@ class InMemoryFile;
 } // namespace detail
 
 /// An in-memory file system.
-class InMemoryFileSystem : public FileSystem {
+class LLVM_SUPPORT_ABI InMemoryFileSystem : public FileSystem {
   std::unique_ptr<detail::InMemoryDirectory> Root;
   std::string WorkingDirectory;
   bool UseNormalizedPaths = true;
@@ -500,7 +502,7 @@ llvm::sys::fs::UniqueID getNextVirtualUniqueID();
 
 /// Gets a \p FileSystem for a virtual file system described in YAML
 /// format.
-std::unique_ptr<FileSystem>
+LLVM_SUPPORT_ABI std::unique_ptr<FileSystem>
 getVFSFromYAML(std::unique_ptr<llvm::MemoryBuffer> Buffer,
                llvm::SourceMgr::DiagHandlerTy DiagHandler,
                StringRef YAMLFilePath, void *DiagContext = nullptr,
@@ -829,12 +831,14 @@ public:
 
   /// Parses \p Buffer, which is expected to be in YAML format and
   /// returns a virtual file system representing its contents.
+  LLVM_SUPPORT_ABI
   static std::unique_ptr<RedirectingFileSystem>
   create(std::unique_ptr<MemoryBuffer> Buffer,
          SourceMgr::DiagHandlerTy DiagHandler, StringRef YAMLFilePath,
          void *DiagContext, IntrusiveRefCntPtr<FileSystem> ExternalFS);
 
   /// Redirect each of the remapped files from first to second.
+  LLVM_SUPPORT_ABI
   static std::unique_ptr<RedirectingFileSystem>
   create(ArrayRef<std::pair<std::string, std::string>> RemappedFiles,
          bool UseExternalNames, FileSystem &ExternalFS);
@@ -873,14 +877,14 @@ public:
 /// Collect all pairs of <virtual path, real path> entries from the
 /// \p YAMLFilePath. This is used by the module dependency collector to forward
 /// the entries into the reproducer output VFS YAML file.
-void collectVFSFromYAML(
+LLVM_SUPPORT_ABI void collectVFSFromYAML(
     std::unique_ptr<llvm::MemoryBuffer> Buffer,
     llvm::SourceMgr::DiagHandlerTy DiagHandler, StringRef YAMLFilePath,
     SmallVectorImpl<YAMLVFSEntry> &CollectedEntries,
     void *DiagContext = nullptr,
     IntrusiveRefCntPtr<FileSystem> ExternalFS = getRealFileSystem());
 
-class YAMLVFSWriter {
+class LLVM_SUPPORT_ABI YAMLVFSWriter {
   std::vector<YAMLVFSEntry> Mappings;
   Optional<bool> IsCaseSensitive;
   Optional<bool> IsOverlayRelative;

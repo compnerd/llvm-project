@@ -18,6 +18,8 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/Support/HashBuilder.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 #include <tuple>
 
@@ -26,7 +28,7 @@ class raw_ostream;
 class StringRef;
 
 /// Represents a version number in the form major[.minor[.subminor[.build]]].
-class VersionTuple {
+class LLVM_SUPPORT_ABI VersionTuple {
   unsigned Major : 32;
 
   unsigned Minor : 31;
@@ -181,6 +183,7 @@ public:
 };
 
 /// Print a version number.
+LLVM_SUPPORT_ABI
 raw_ostream &operator<<(raw_ostream &Out, const VersionTuple &V);
 
 // Provide DenseMapInfo for version tuples.

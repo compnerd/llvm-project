@@ -22,6 +22,8 @@
 #ifndef LLVM_SUPPORT_SHA256_H
 #define LLVM_SUPPORT_SHA256_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <array>
 #include <cstdint>
 
@@ -30,7 +32,7 @@ namespace llvm {
 template <typename T> class ArrayRef;
 class StringRef;
 
-class SHA256 {
+class LLVM_SUPPORT_ABI SHA256 {
 public:
   explicit SHA256() { init(); }
 

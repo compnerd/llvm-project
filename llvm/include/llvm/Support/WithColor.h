@@ -9,6 +9,7 @@
 #ifndef LLVM_SUPPORT_WITHCOLOR_H
 #define LLVM_SUPPORT_WITHCOLOR_H
 
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -20,7 +21,7 @@ namespace cl {
 class OptionCategory;
 }
 
-extern cl::OptionCategory &getColorCategory();
+LLVM_SUPPORT_ABI cl::OptionCategory &getColorCategory();
 
 // Symbolic names for various syntax elements.
 enum class HighlightColor {
@@ -50,7 +51,7 @@ enum class ColorMode {
 
 /// An RAII object that temporarily switches an output stream to a specific
 /// color.
-class WithColor {
+class LLVM_SUPPORT_ABI WithColor {
   raw_ostream &OS;
   ColorMode Mode;
 

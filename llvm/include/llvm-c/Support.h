@@ -17,6 +17,7 @@
 #include "llvm-c/DataTypes.h"
 #include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 LLVM_C_EXTERN_C_BEGIN
 
@@ -36,6 +37,7 @@ LLVMBool LLVMLoadLibraryPermanently(const char* Filename);
  *
  * @see llvm::cl::ParseCommandLineOptions()
  */
+LLVM_SUPPORT_ABI
 void LLVMParseCommandLineOptions(int argc, const char *const *argv,
                                  const char *Overview);
 

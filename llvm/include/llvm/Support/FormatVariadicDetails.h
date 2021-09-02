@@ -10,6 +10,7 @@
 #define LLVM_SUPPORT_FORMATVARIADICDETAILS_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <type_traits>
@@ -19,7 +20,7 @@ template <typename T, typename Enable = void> struct format_provider {};
 class Error;
 
 namespace detail {
-class format_adapter {
+class LLVM_SUPPORT_ABI format_adapter {
   virtual void anchor();
 
 protected:

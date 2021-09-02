@@ -23,8 +23,10 @@
 #include "llvm/Support/AllocatorBase.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemAlloc.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -40,7 +42,7 @@ namespace detail {
 
 // We call out to an external function to actually print the message as the
 // printing code uses Allocator.h in its implementation.
-void printBumpPtrAllocatorStats(unsigned NumSlabs, size_t BytesAllocated,
+LLVM_SUPPORT_ABI void printBumpPtrAllocatorStats(unsigned NumSlabs, size_t BytesAllocated,
                                 size_t TotalMemory);
 
 } // end namespace detail

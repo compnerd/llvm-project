@@ -16,11 +16,12 @@
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 class StringRef;
 
-class ARMAttributeParser : public ELFAttributeParser {
+class LLVM_SUPPORT_ABI ARMAttributeParser : public ELFAttributeParser {
   struct DisplayHandler {
     ARMBuildAttrs::AttrType attribute;
     Error (ARMAttributeParser::*routine)(ARMBuildAttrs::AttrType);

@@ -16,7 +16,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
+
 #include <algorithm>
 
 namespace llvm {
@@ -57,8 +59,9 @@ struct HexNumber {
   uint64_t Value;
 };
 
-raw_ostream &operator<<(raw_ostream &OS, const HexNumber &Value);
-std::string to_hexString(uint64_t Value, bool UpperCase = true);
+LLVM_SUPPORT_ABI raw_ostream &operator<<(raw_ostream &OS, const HexNumber &Value);
+
+LLVM_SUPPORT_ABI std::string to_hexString(uint64_t Value, bool UpperCase = true);
 
 template <class T> std::string to_string(const T &Value) {
   std::string number;
@@ -67,7 +70,7 @@ template <class T> std::string to_string(const T &Value) {
   return stream.str();
 }
 
-class ScopedPrinter {
+class LLVM_SUPPORT_ABI ScopedPrinter {
 public:
   ScopedPrinter(raw_ostream &OS) : OS(OS), IndentLevel(0) {}
 

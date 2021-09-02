@@ -20,6 +20,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Config/llvm-config.h" // for LLVM_ON_UNIX
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <ciso646> // So we can check the C++ standard lib macros.
 #include <functional>
 
@@ -53,7 +55,7 @@ class Twine;
 
 /// Returns true if LLVM is compiled with support for multi-threading, and
 /// false otherwise.
-bool llvm_is_multithreaded();
+LLVM_SUPPORT_ABI bool llvm_is_multithreaded();
 
 #if LLVM_THREADING_USE_STD_CALL_ONCE
 
@@ -116,7 +118,7 @@ bool llvm_is_multithreaded();
   }
 
   /// This tells how a thread pool will be used
-  class ThreadPoolStrategy {
+  class LLVM_SUPPORT_ABI ThreadPoolStrategy {
   public:
     // The default value (0) means all available threads should be used,
     // taking the affinity mask into account. If set, this value only represents
@@ -152,7 +154,7 @@ bool llvm_is_multithreaded();
   /// strategy, we attempt to equally allocate the threads on all CPU sockets.
   /// "0" or an empty string will return the \p Default strategy.
   /// "all" for using all hardware threads.
-  Optional<ThreadPoolStrategy>
+  LLVM_SUPPORT_ABI Optional<ThreadPoolStrategy>
   get_threadpool_strategy(StringRef Num, ThreadPoolStrategy Default = {});
 
   /// Returns a thread strategy for tasks requiring significant memory or other
@@ -205,7 +207,7 @@ bool llvm_is_multithreaded();
   /// Note that not all platforms guarantee that the value returned will be
   /// unique across the entire system, so portable code should not assume
   /// this.
-  uint64_t get_threadid();
+  LLVM_SUPPORT_ABI uint64_t get_threadid();
 
   /// Get the maximum length of a thread name on this platform.
   /// A value of 0 means there is no limit.
@@ -217,7 +219,7 @@ bool llvm_is_multithreaded();
   /// wildly across operating systems, and we only make a best effort to
   /// perform the operation on supported platforms.  No indication of success
   /// or failure is returned.
-  void set_thread_name(const Twine &Name);
+  LLVM_SUPPORT_ABI void set_thread_name(const Twine &Name);
 
   /// Get the name of the current thread.  The level of support for
   /// getting a thread's name varies wildly across operating systems, and it
@@ -225,15 +227,15 @@ bool llvm_is_multithreaded();
   /// that you can later get it back.  This function is intended for diagnostic
   /// purposes, and as with setting a thread's name no indication of whether
   /// the operation succeeded or failed is returned.
-  void get_thread_name(SmallVectorImpl<char> &Name);
+  LLVM_SUPPORT_ABI void get_thread_name(SmallVectorImpl<char> &Name);
 
   /// Returns a mask that represents on which hardware thread, core, CPU, NUMA
   /// group, the calling thread can be executed. On Windows, threads cannot
   /// cross CPU sockets boundaries.
-  llvm::BitVector get_thread_affinity_mask();
+  LLVM_SUPPORT_ABI llvm::BitVector get_thread_affinity_mask();
 
   /// Returns how many physical CPUs or NUMA groups the system has.
-  unsigned get_cpus();
+  LLVM_SUPPORT_ABI unsigned get_cpus();
 
   enum class ThreadPriority {
     Background = 0,
@@ -246,7 +248,8 @@ bool llvm_is_multithreaded();
   /// If the priority is default tries to restore current threads priority to
   /// default scheduling priority.
   enum class SetThreadPriorityResult { FAILURE, SUCCESS };
-  SetThreadPriorityResult set_thread_priority(ThreadPriority Priority);
+
+  LLVM_SUPPORT_ABI SetThreadPriorityResult set_thread_priority(ThreadPriority Priority);
 }
 
 #endif

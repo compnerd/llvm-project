@@ -16,11 +16,12 @@
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 
 // Struct for tracking the known zeros and ones of a value.
-struct KnownBits {
+struct LLVM_SUPPORT_ABI KnownBits {
   APInt Zero;
   APInt One;
 

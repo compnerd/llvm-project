@@ -12,6 +12,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -80,7 +82,7 @@ namespace llvm {
   /// so we provide two additional methods (and accompanying operator+
   /// overloads) to guarantee that particularly important cases (cstring plus
   /// StringRef) codegen as desired.
-  class Twine {
+  class LLVM_SUPPORT_ABI Twine {
     /// NodeKind - Represent the type of an argument.
     enum NodeKind : unsigned char {
       /// An empty string; the result of concatenating anything with it is also

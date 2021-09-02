@@ -12,6 +12,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 
@@ -38,7 +39,7 @@ inline uint24_t getSwappedBytes(uint24_t C) {
   return uint24_t(C.Bytes[2], C.Bytes[1], C.Bytes[0]);
 }
 
-class DataExtractor {
+class LLVM_SUPPORT_ABI DataExtractor {
   StringRef Data;
   uint8_t IsLittleEndian;
   uint8_t AddressSize;

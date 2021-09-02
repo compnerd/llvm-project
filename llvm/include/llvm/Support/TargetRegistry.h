@@ -27,6 +27,8 @@
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -675,7 +677,7 @@ public:
 };
 
 /// TargetRegistry - Generic interface to target specific features.
-struct TargetRegistry {
+struct LLVM_SUPPORT_ABI TargetRegistry {
   // FIXME: Make this a namespace, probably just move all the Register*
   // functions into Target (currently they all just set members on the Target
   // anyway, and Target friends this class so those functions can...

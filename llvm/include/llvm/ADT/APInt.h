@@ -16,7 +16,9 @@
 #define LLVM_ADT_APINT_H
 
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MathExtras.h"
+
 #include <cassert>
 #include <climits>
 #include <cstring>
@@ -67,7 +69,7 @@ inline APInt operator-(APInt);
 ///   * In general, the class tries to follow the style of computation that LLVM
 ///     uses in its IR. This simplifies its use for LLVM.
 ///
-class LLVM_NODISCARD APInt {
+class LLVM_SUPPORT_ABI LLVM_NODISCARD APInt {
 public:
   typedef uint64_t WordType;
 
@@ -686,7 +688,7 @@ public:
   }
 
   /// Overload to compute a hash_code for an APInt value.
-  friend hash_code hash_value(const APInt &Arg);
+  friend LLVM_SUPPORT_ABI hash_code hash_value(const APInt &Arg);
 
   /// This function returns a pointer to the internal storage of the APInt.
   /// This is useful for writing out the APInt in binary form without any
@@ -2190,7 +2192,7 @@ inline const APInt &umax(const APInt &A, const APInt &B) {
 /// using Stein's algorithm.
 ///
 /// \returns the greatest common divisor of A and B.
-APInt GreatestCommonDivisor(APInt A, APInt B);
+LLVM_SUPPORT_ABI APInt GreatestCommonDivisor(APInt A, APInt B);
 
 /// Converts the given APInt to a double value.
 ///
@@ -2221,7 +2223,7 @@ inline float RoundSignedAPIntToFloat(const APInt &APIVal) {
 /// Converts the given double value into a APInt.
 ///
 /// This function convert a double value to an APInt value.
-APInt RoundDoubleToAPInt(double Double, unsigned width);
+LLVM_SUPPORT_ABI APInt RoundDoubleToAPInt(double Double, unsigned width);
 
 /// Converts a float value into a APInt.
 ///
@@ -2231,10 +2233,10 @@ inline APInt RoundFloatToAPInt(float Float, unsigned width) {
 }
 
 /// Return A unsign-divided by B, rounded by the given rounding mode.
-APInt RoundingUDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
+LLVM_SUPPORT_ABI APInt RoundingUDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
 
 /// Return A sign-divided by B, rounded by the given rounding mode.
-APInt RoundingSDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
+LLVM_SUPPORT_ABI APInt RoundingSDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
 
 /// Let q(n) = An^2 + Bn + C, and BW = bit width of the value range
 /// (e.g. 32 for i32).
@@ -2269,30 +2271,30 @@ APInt RoundingSDiv(const APInt &A, const APInt &B, APInt::Rounding RM);
 ///
 /// The returned value may have a different bit width from the input
 /// coefficients.
-Optional<APInt> SolveQuadraticEquationWrap(APInt A, APInt B, APInt C,
+LLVM_SUPPORT_ABI Optional<APInt> SolveQuadraticEquationWrap(APInt A, APInt B, APInt C,
                                            unsigned RangeWidth);
 
 /// Compare two values, and if they are different, return the position of the
 /// most significant bit that is different in the values.
-Optional<unsigned> GetMostSignificantDifferentBit(const APInt &A,
+LLVM_SUPPORT_ABI Optional<unsigned> GetMostSignificantDifferentBit(const APInt &A,
                                                   const APInt &B);
 
 } // End of APIntOps namespace
 
 // See friend declaration above. This additional declaration is required in
 // order to compile LLVM with IBM xlC compiler.
-hash_code hash_value(const APInt &Arg);
+LLVM_SUPPORT_ABI hash_code hash_value(const APInt &Arg);
 
 /// StoreIntToMemory - Fills the StoreBytes bytes of memory starting from Dst
 /// with the integer held in IntVal.
-void StoreIntToMemory(const APInt &IntVal, uint8_t *Dst, unsigned StoreBytes);
+LLVM_SUPPORT_ABI void StoreIntToMemory(const APInt &IntVal, uint8_t *Dst, unsigned StoreBytes);
 
 /// LoadIntFromMemory - Loads the integer stored in the LoadBytes bytes starting
 /// from Src into IntVal, which is assumed to be wide enough and to hold zero.
-void LoadIntFromMemory(APInt &IntVal, const uint8_t *Src, unsigned LoadBytes);
+LLVM_SUPPORT_ABI void LoadIntFromMemory(APInt &IntVal, const uint8_t *Src, unsigned LoadBytes);
 
 /// Provide DenseMapInfo for APInt.
-template <> struct DenseMapInfo<APInt> {
+template <> struct LLVM_SUPPORT_ABI DenseMapInfo<APInt> {
   static inline APInt getEmptyKey() {
     APInt V(nullptr, 0);
     V.U.VAL = 0;

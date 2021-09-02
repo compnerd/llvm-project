@@ -17,7 +17,9 @@
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/FoldingSet.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
+
 #include <memory>
 
 namespace llvm {
@@ -440,7 +442,7 @@ public:
 using SMTSolverRef = std::shared_ptr<SMTSolver>;
 
 /// Convenience method to create and Z3Solver object
-SMTSolverRef CreateZ3Solver();
+LLVM_SUPPORT_ABI SMTSolverRef CreateZ3Solver();
 
 } // namespace llvm
 

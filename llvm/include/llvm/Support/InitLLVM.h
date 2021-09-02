@@ -12,6 +12,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/PrettyStackTrace.h"
 
 // The main() functions in typical LLVM tools start with InitLLVM which does
@@ -32,7 +33,7 @@
 // InitLLVM calls llvm_shutdown() on destruction, which cleans up
 // ManagedStatic objects.
 namespace llvm {
-class InitLLVM {
+class LLVM_SUPPORT_ABI InitLLVM {
 public:
   InitLLVM(int &Argc, const char **&Argv,
            bool InstallPipeSignalExitHandler = true);

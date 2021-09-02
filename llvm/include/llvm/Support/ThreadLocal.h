@@ -14,14 +14,16 @@
 #define LLVM_SUPPORT_THREADLOCAL_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/Threading.h"
+
 #include <cassert>
 
 namespace llvm {
   namespace sys {
     // ThreadLocalImpl - Common base class of all ThreadLocal instantiations.
     // YOU SHOULD NEVER USE THIS DIRECTLY.
-    class ThreadLocalImpl {
+    class LLVM_SUPPORT_ABI ThreadLocalImpl {
       typedef uint64_t ThreadLocalDataTy;
       /// Platform-specific thread local data.
       ///

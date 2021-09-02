@@ -52,8 +52,10 @@
 #define LLVM_SUPPORT_SPECIALCASELIST_H
 
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/TrigramIndex.h"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -66,7 +68,7 @@ namespace vfs {
 class FileSystem;
 }
 
-class SpecialCaseList {
+class LLVM_SUPPORT_ABI SpecialCaseList {
 public:
   /// Parses the special case list entries from files. On failure, returns
   /// 0 and writes an error message to string.
@@ -120,10 +122,10 @@ protected:
   /// literal strings than Regex.
   class Matcher {
   public:
-    bool insert(std::string Regexp, unsigned LineNumber, std::string &REError);
+    LLVM_SUPPORT_ABI bool insert(std::string Regexp, unsigned LineNumber, std::string &REError);
     // Returns the line number in the source file that this query matches to.
     // Returns zero if no match is found.
-    unsigned match(StringRef Query) const;
+    LLVM_SUPPORT_ABI unsigned match(StringRef Query) const;
 
   private:
     StringMap<unsigned> Strings;

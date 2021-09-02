@@ -49,7 +49,7 @@
 #endif
 
 namespace llvm {
-pthread_t
+LLVM_SUPPORT_ABI pthread_t
 llvm_execute_on_thread_impl(void *(*ThreadFunc)(void *), void *Arg,
                             llvm::Optional<unsigned> StackSizeInBytes) {
   int errnum;
@@ -81,6 +81,7 @@ llvm_execute_on_thread_impl(void *(*ThreadFunc)(void *), void *Arg,
   return Thread;
 }
 
+LLVM_SUPPORT_ABI
 void llvm_thread_detach_impl(pthread_t Thread) {
   int errnum;
 
@@ -89,6 +90,7 @@ void llvm_thread_detach_impl(pthread_t Thread) {
   }
 }
 
+LLVM_SUPPORT_ABI
 void llvm_thread_join_impl(pthread_t Thread) {
   int errnum;
 

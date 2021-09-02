@@ -27,7 +27,9 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
@@ -39,11 +41,11 @@ namespace llvm {
 
 namespace DOT {  // Private functions...
 
-std::string EscapeString(const std::string &Label);
+LLVM_SUPPORT_ABI std::string EscapeString(const std::string &Label);
 
 /// Get a color string for this node number. Simply round-robin selects
 /// from a reasonable number of colors.
-StringRef getColorString(unsigned NodeNumber);
+LLVM_SUPPORT_ABI StringRef getColorString(unsigned NodeNumber);
 
 } // end namespace DOT
 
@@ -59,7 +61,7 @@ enum Name {
 
 } // end namespace GraphProgram
 
-bool DisplayGraph(StringRef Filename, bool wait = true,
+LLVM_SUPPORT_ABI bool DisplayGraph(StringRef Filename, bool wait = true,
                   GraphProgram::Name program = GraphProgram::DOT);
 
 template<typename GraphType>
@@ -316,7 +318,7 @@ raw_ostream &WriteGraph(raw_ostream &O, const GraphType &G,
   return O;
 }
 
-std::string createGraphFilename(const Twine &Name, int &FD);
+LLVM_SUPPORT_ABI std::string createGraphFilename(const Twine &Name, int &FD);
 
 /// Writes graph into a provided @c Filename.
 /// If @c Filename is empty, generates a random one.

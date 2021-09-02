@@ -19,7 +19,9 @@
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/type_traits.h"
+
 #include <cassert>
 #include <memory>
 #include <new>
@@ -479,7 +481,7 @@ constexpr bool operator>=(const T &X, const Optional<T> &Y) {
   return !(X < Y);
 }
 
-raw_ostream &operator<<(raw_ostream &OS, NoneType);
+LLVM_SUPPORT_ABI raw_ostream &operator<<(raw_ostream &OS, NoneType);
 
 template <typename T, typename = decltype(std::declval<raw_ostream &>()
                                           << std::declval<const T &>())>

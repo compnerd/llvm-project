@@ -19,11 +19,12 @@
 #define LLVM_SUPPORT_ARMBUILDATTRIBUTES_H
 
 #include "llvm/Support/ELFAttributes.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 namespace ARMBuildAttrs {
 
-const TagNameMap &getARMAttributeTags();
+LLVM_SUPPORT_ABI const TagNameMap &getARMAttributeTags();
 
 enum SpecialAttr {
   // This is for the .cpu asm attr. It translates into one or more

@@ -18,11 +18,12 @@
 #define LLVM_SUPPORT_RISCVATTRIBUTES_H
 
 #include "llvm/Support/ELFAttributes.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 namespace RISCVAttrs {
 
-const TagNameMap &getRISCVAttributeTags();
+LLVM_SUPPORT_ABI const TagNameMap &getRISCVAttributeTags();
 
 enum AttrType : unsigned {
   // Attribute types in ELF/.riscv.attributes.

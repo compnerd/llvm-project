@@ -17,6 +17,8 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <vector>
 
 // This class represents a glob pattern. Supported metacharacters
@@ -26,7 +28,7 @@ namespace llvm {
 template <typename T> class ArrayRef;
 class StringRef;
 
-class GlobPattern {
+class LLVM_SUPPORT_ABI GlobPattern {
 public:
   static Expected<GlobPattern> create(StringRef Pat);
   bool match(StringRef S) const;

@@ -24,7 +24,7 @@
 #endif
 
 namespace llvm {
-HANDLE
+LLVM_SUPPORT_ABI HANDLE
 llvm_execute_on_thread_impl(unsigned(__stdcall *ThreadFunc)(void *), void *Arg,
                             llvm::Optional<unsigned> StackSizeInBytes) {
   HANDLE hThread = (HANDLE)::_beginthreadex(
@@ -37,12 +37,14 @@ llvm_execute_on_thread_impl(unsigned(__stdcall *ThreadFunc)(void *), void *Arg,
   return hThread;
 }
 
+LLVM_SUPPORT_ABI
 void llvm_thread_join_impl(HANDLE hThread) {
   if (::WaitForSingleObject(hThread, INFINITE) == WAIT_FAILED) {
     ReportLastErrorFatal("WaitForSingleObject failed");
   }
 }
 
+LLVM_SUPPORT_ABI
 void llvm_thread_detach_impl(HANDLE hThread) {
   if (::CloseHandle(hThread) == FALSE) {
     ReportLastErrorFatal("CloseHandle failed");

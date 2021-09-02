@@ -14,13 +14,14 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 #include <unordered_map>
 
 namespace llvm {
 class StringRef;
 
-class ELFAttributeParser {
+class LLVM_SUPPORT_ABI ELFAttributeParser {
   StringRef vendor;
   std::unordered_map<unsigned, unsigned> attributes;
   std::unordered_map<unsigned, StringRef> attributesStr;

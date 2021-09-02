@@ -14,6 +14,7 @@
 #define LLVM_SUPPORT_TOOLOUTPUTFILE_H
 
 #include "llvm/ADT/Optional.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -28,7 +29,7 @@ class ToolOutputFile {
   /// before the raw_fd_ostream is constructed and destructed after the
   /// raw_fd_ostream is destructed. It installs cleanups in its constructor and
   /// uninstalls them in its destructor.
-  class CleanupInstaller {
+  class LLVM_SUPPORT_ABI CleanupInstaller {
     /// The name of the file.
     std::string Filename;
   public:
@@ -50,9 +51,11 @@ class ToolOutputFile {
 public:
   /// This constructor's arguments are passed to raw_fd_ostream's
   /// constructor.
+  LLVM_SUPPORT_ABI
   ToolOutputFile(StringRef Filename, std::error_code &EC,
                  sys::fs::OpenFlags Flags);
 
+  LLVM_SUPPORT_ABI
   ToolOutputFile(StringRef Filename, int FD);
 
   /// Return the contained raw_fd_ostream.

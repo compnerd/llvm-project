@@ -17,6 +17,8 @@
 
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/DataTypes.h" // Needed for uint64_t on Windows.
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <random>
 #include <system_error>
 
@@ -29,7 +31,7 @@ class StringRef;
 /// seed should be set by passing the -rng-seed=<uint64> option. Use
 /// Module::createRNG to create a new RNG instance for use with that
 /// module.
-class RandomNumberGenerator {
+class LLVM_SUPPORT_ABI RandomNumberGenerator {
 
   // 64-bit Mersenne Twister by Matsumoto and Nishimura, 2000
   // http://en.cppreference.com/w/cpp/numeric/random/mersenne_twister_engine
@@ -63,7 +65,7 @@ private:
 };
 
 // Get random vector of specified size
-std::error_code getRandomBytes(void *Buffer, size_t Size);
+LLVM_SUPPORT_ABI std::error_code getRandomBytes(void *Buffer, size_t Size);
 }
 
 #endif

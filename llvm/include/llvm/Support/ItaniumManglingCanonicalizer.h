@@ -14,6 +14,8 @@
 #ifndef LLVM_SUPPORT_ITANIUMMANGLINGCANONICALIZER_H
 #define LLVM_SUPPORT_ITANIUMMANGLINGCANONICALIZER_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -33,7 +35,7 @@ class StringRef;
 /// This can be used when data (eg, profiling data) is available for a version
 /// of a program built in a different configuration, with correspondingly
 /// different manglings.
-class ItaniumManglingCanonicalizer {
+class LLVM_SUPPORT_ABI ItaniumManglingCanonicalizer {
 public:
   ItaniumManglingCanonicalizer();
   ItaniumManglingCanonicalizer(const ItaniumManglingCanonicalizer &) = delete;

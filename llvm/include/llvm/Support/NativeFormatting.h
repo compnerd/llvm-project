@@ -10,6 +10,8 @@
 #define LLVM_SUPPORT_NATIVEFORMATTING_H
 
 #include "llvm/ADT/Optional.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <cstdint>
 
 namespace llvm {
@@ -21,24 +23,38 @@ enum class IntegerStyle {
 };
 enum class HexPrintStyle { Upper, Lower, PrefixUpper, PrefixLower };
 
-size_t getDefaultPrecision(FloatStyle Style);
+LLVM_SUPPORT_ABI size_t getDefaultPrecision(FloatStyle Style);
 
-bool isPrefixedHexStyle(HexPrintStyle S);
+LLVM_SUPPORT_ABI bool isPrefixedHexStyle(HexPrintStyle S);
 
+LLVM_SUPPORT_ABI
 void write_integer(raw_ostream &S, unsigned int N, size_t MinDigits,
                    IntegerStyle Style);
+
+LLVM_SUPPORT_ABI
 void write_integer(raw_ostream &S, int N, size_t MinDigits, IntegerStyle Style);
+
+LLVM_SUPPORT_ABI
 void write_integer(raw_ostream &S, unsigned long N, size_t MinDigits,
                    IntegerStyle Style);
+
+LLVM_SUPPORT_ABI
 void write_integer(raw_ostream &S, long N, size_t MinDigits,
                    IntegerStyle Style);
+
+LLVM_SUPPORT_ABI
 void write_integer(raw_ostream &S, unsigned long long N, size_t MinDigits,
                    IntegerStyle Style);
+
+LLVM_SUPPORT_ABI
 void write_integer(raw_ostream &S, long long N, size_t MinDigits,
                    IntegerStyle Style);
 
+LLVM_SUPPORT_ABI
 void write_hex(raw_ostream &S, uint64_t N, HexPrintStyle Style,
                Optional<size_t> Width = None);
+
+LLVM_SUPPORT_ABI
 void write_double(raw_ostream &S, double D, FloatStyle Style,
                   Optional<size_t> Precision = None);
 }

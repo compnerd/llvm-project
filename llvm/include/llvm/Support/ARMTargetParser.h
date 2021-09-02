@@ -17,6 +17,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ARMBuildAttributes.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <vector>
 
 namespace llvm {
@@ -232,48 +234,48 @@ static const ArchNames<ArchKind> ARCHNames[] = {
 };
 
 // Information by ID
-StringRef getFPUName(unsigned FPUKind);
-FPUVersion getFPUVersion(unsigned FPUKind);
-NeonSupportLevel getFPUNeonSupportLevel(unsigned FPUKind);
-FPURestriction getFPURestriction(unsigned FPUKind);
+LLVM_SUPPORT_ABI StringRef getFPUName(unsigned FPUKind);
+LLVM_SUPPORT_ABI FPUVersion getFPUVersion(unsigned FPUKind);
+LLVM_SUPPORT_ABI NeonSupportLevel getFPUNeonSupportLevel(unsigned FPUKind);
+LLVM_SUPPORT_ABI FPURestriction getFPURestriction(unsigned FPUKind);
 
 // FIXME: These should be moved to TargetTuple once it exists
-bool getFPUFeatures(unsigned FPUKind, std::vector<StringRef> &Features);
-bool getHWDivFeatures(uint64_t HWDivKind, std::vector<StringRef> &Features);
-bool getExtensionFeatures(uint64_t Extensions,
+LLVM_SUPPORT_ABI bool getFPUFeatures(unsigned FPUKind, std::vector<StringRef> &Features);
+LLVM_SUPPORT_ABI bool getHWDivFeatures(uint64_t HWDivKind, std::vector<StringRef> &Features);
+LLVM_SUPPORT_ABI bool getExtensionFeatures(uint64_t Extensions,
                           std::vector<StringRef> &Features);
 
-StringRef getArchName(ArchKind AK);
-unsigned getArchAttr(ArchKind AK);
-StringRef getCPUAttr(ArchKind AK);
-StringRef getSubArch(ArchKind AK);
-StringRef getArchExtName(uint64_t ArchExtKind);
-StringRef getArchExtFeature(StringRef ArchExt);
-bool appendArchExtFeatures(StringRef CPU, ARM::ArchKind AK, StringRef ArchExt,
+LLVM_SUPPORT_ABI StringRef getArchName(ArchKind AK);
+LLVM_SUPPORT_ABI unsigned getArchAttr(ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getCPUAttr(ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getSubArch(ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getArchExtName(uint64_t ArchExtKind);
+LLVM_SUPPORT_ABI StringRef getArchExtFeature(StringRef ArchExt);
+LLVM_SUPPORT_ABI bool appendArchExtFeatures(StringRef CPU, ARM::ArchKind AK, StringRef ArchExt,
                            std::vector<StringRef> &Features,
                            unsigned &ArgFPUKind);
 
 // Information by Name
-unsigned getDefaultFPU(StringRef CPU, ArchKind AK);
-uint64_t getDefaultExtensions(StringRef CPU, ArchKind AK);
-StringRef getDefaultCPU(StringRef Arch);
+LLVM_SUPPORT_ABI unsigned getDefaultFPU(StringRef CPU, ArchKind AK);
+LLVM_SUPPORT_ABI uint64_t getDefaultExtensions(StringRef CPU, ArchKind AK);
+LLVM_SUPPORT_ABI StringRef getDefaultCPU(StringRef Arch);
 StringRef getCanonicalArchName(StringRef Arch);
 StringRef getFPUSynonym(StringRef FPU);
 StringRef getArchSynonym(StringRef Arch);
 
 // Parser
-uint64_t parseHWDiv(StringRef HWDiv);
-unsigned parseFPU(StringRef FPU);
-ArchKind parseArch(StringRef Arch);
-uint64_t parseArchExt(StringRef ArchExt);
-ArchKind parseCPUArch(StringRef CPU);
-ISAKind parseArchISA(StringRef Arch);
-EndianKind parseArchEndian(StringRef Arch);
-ProfileKind parseArchProfile(StringRef Arch);
-unsigned parseArchVersion(StringRef Arch);
+LLVM_SUPPORT_ABI uint64_t parseHWDiv(StringRef HWDiv);
+LLVM_SUPPORT_ABI unsigned parseFPU(StringRef FPU);
+LLVM_SUPPORT_ABI ArchKind parseArch(StringRef Arch);
+LLVM_SUPPORT_ABI uint64_t parseArchExt(StringRef ArchExt);
+LLVM_SUPPORT_ABI ArchKind parseCPUArch(StringRef CPU);
+LLVM_SUPPORT_ABI ISAKind parseArchISA(StringRef Arch);
+LLVM_SUPPORT_ABI EndianKind parseArchEndian(StringRef Arch);
+LLVM_SUPPORT_ABI ProfileKind parseArchProfile(StringRef Arch);
+LLVM_SUPPORT_ABI unsigned parseArchVersion(StringRef Arch);
 
-void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values);
-StringRef computeDefaultTargetABI(const Triple &TT, StringRef CPU);
+LLVM_SUPPORT_ABI void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values);
+LLVM_SUPPORT_ABI StringRef computeDefaultTargetABI(const Triple &TT, StringRef CPU);
 
 } // namespace ARM
 } // namespace llvm

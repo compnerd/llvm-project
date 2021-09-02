@@ -13,6 +13,8 @@
 #ifndef LLVM_SUPPORT_DYNAMICLIBRARY_H
 #define LLVM_SUPPORT_DYNAMICLIBRARY_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 
 namespace llvm {
@@ -33,7 +35,7 @@ namespace sys {
   ///
   /// Note: there is currently no interface for temporarily loading a library,
   /// or for unloading libraries when the LLVM library is unloaded.
-  class DynamicLibrary {
+  class LLVM_SUPPORT_ABI DynamicLibrary {
     // Placeholder whose address represents an invalid library.
     // We use this instead of NULL or a pointer-int pair because the OS library
     // might define 0 or 1 to be "special" handles, such as "search all".

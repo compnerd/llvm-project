@@ -19,6 +19,8 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/ARMTargetParser.h"
 #include "llvm/Support/AArch64TargetParser.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <vector>
 
 namespace llvm {
@@ -132,18 +134,18 @@ enum ArchFeatureKind : uint32_t {
   FEATURE_SRAMECC = 1 << 8,
 };
 
-StringRef getArchNameAMDGCN(GPUKind AK);
-StringRef getArchNameR600(GPUKind AK);
-StringRef getCanonicalArchName(const Triple &T, StringRef Arch);
-GPUKind parseArchAMDGCN(StringRef CPU);
-GPUKind parseArchR600(StringRef CPU);
-unsigned getArchAttrAMDGCN(GPUKind AK);
-unsigned getArchAttrR600(GPUKind AK);
+LLVM_SUPPORT_ABI StringRef getArchNameAMDGCN(GPUKind AK);
+LLVM_SUPPORT_ABI StringRef getArchNameR600(GPUKind AK);
+LLVM_SUPPORT_ABI StringRef getCanonicalArchName(const Triple &T, StringRef Arch);
+LLVM_SUPPORT_ABI GPUKind parseArchAMDGCN(StringRef CPU);
+LLVM_SUPPORT_ABI GPUKind parseArchR600(StringRef CPU);
+LLVM_SUPPORT_ABI unsigned getArchAttrAMDGCN(GPUKind AK);
+LLVM_SUPPORT_ABI unsigned getArchAttrR600(GPUKind AK);
 
-void fillValidArchListAMDGCN(SmallVectorImpl<StringRef> &Values);
-void fillValidArchListR600(SmallVectorImpl<StringRef> &Values);
+LLVM_SUPPORT_ABI void fillValidArchListAMDGCN(SmallVectorImpl<StringRef> &Values);
+LLVM_SUPPORT_ABI void fillValidArchListR600(SmallVectorImpl<StringRef> &Values);
 
-IsaVersion getIsaVersion(StringRef GPU);
+LLVM_SUPPORT_ABI IsaVersion getIsaVersion(StringRef GPU);
 
 } // namespace AMDGPU
 
@@ -165,15 +167,15 @@ enum FeatureKind : unsigned {
   FK_64BIT = 1 << 7,
 };
 
-bool checkCPUKind(CPUKind Kind, bool IsRV64);
-bool checkTuneCPUKind(CPUKind Kind, bool IsRV64);
-CPUKind parseCPUKind(StringRef CPU);
-CPUKind parseTuneCPUKind(StringRef CPU, bool IsRV64);
-StringRef getMArchFromMcpu(StringRef CPU);
-void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values, bool IsRV64);
-void fillValidTuneCPUArchList(SmallVectorImpl<StringRef> &Values, bool IsRV64);
-bool getCPUFeaturesExceptStdExt(CPUKind Kind, std::vector<StringRef> &Features);
-StringRef resolveTuneCPUAlias(StringRef TuneCPU, bool IsRV64);
+LLVM_SUPPORT_ABI bool checkCPUKind(CPUKind Kind, bool IsRV64);
+LLVM_SUPPORT_ABI bool checkTuneCPUKind(CPUKind Kind, bool IsRV64);
+LLVM_SUPPORT_ABI CPUKind parseCPUKind(StringRef CPU);
+LLVM_SUPPORT_ABI CPUKind parseTuneCPUKind(StringRef CPU, bool IsRV64);
+LLVM_SUPPORT_ABI StringRef getMArchFromMcpu(StringRef CPU);
+LLVM_SUPPORT_ABI void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values, bool IsRV64);
+LLVM_SUPPORT_ABI void fillValidTuneCPUArchList(SmallVectorImpl<StringRef> &Values, bool IsRV64);
+LLVM_SUPPORT_ABI bool getCPUFeaturesExceptStdExt(CPUKind Kind, std::vector<StringRef> &Features);
+LLVM_SUPPORT_ABI StringRef resolveTuneCPUAlias(StringRef TuneCPU, bool IsRV64);
 
 } // namespace RISCV
 

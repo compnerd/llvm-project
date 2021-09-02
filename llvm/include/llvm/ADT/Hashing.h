@@ -319,7 +319,7 @@ struct hash_state {
 /// This variable can be set using the \see llvm::set_fixed_execution_seed
 /// function. See that function for details. Do not, under any circumstances,
 /// set or read this variable.
-extern uint64_t fixed_seed_override;
+extern LLVM_SUPPORT_ABI uint64_t fixed_seed_override;
 
 inline uint64_t get_execution_seed() {
   // FIXME: This needs to be a per-execution seed. This is just a placeholder

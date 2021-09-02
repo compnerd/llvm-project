@@ -12,6 +12,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Threading.h"
 
@@ -27,7 +28,7 @@ namespace parallel {
 // Strategy for the default executor used by the parallel routines provided by
 // this file. It defaults to using all hardware threads and should be
 // initialized before the first use of parallel routines.
-extern ThreadPoolStrategy strategy;
+extern LLVM_SUPPORT_ABI ThreadPoolStrategy strategy;
 
 namespace detail {
 
@@ -59,7 +60,7 @@ public:
   }
 };
 
-class TaskGroup {
+class LLVM_SUPPORT_ABI TaskGroup {
   Latch L;
   bool Parallel;
 

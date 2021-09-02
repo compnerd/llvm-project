@@ -47,13 +47,15 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/UniqueVector.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 
 namespace llvm {
 
 class raw_ostream;
 
-class DebugCounter {
+class LLVM_SUPPORT_ABI DebugCounter {
 public:
   ~DebugCounter();
 

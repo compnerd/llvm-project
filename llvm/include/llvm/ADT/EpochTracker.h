@@ -16,6 +16,7 @@
 #define LLVM_ADT_EPOCHTRACKER_H
 
 #include "llvm/Config/abi-breaking.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 #include <cstdint>
 
@@ -32,7 +33,7 @@ namespace llvm {
 /// isHandleInSync at appropriate points to assert that the handle they're using
 /// is still valid.
 ///
-class DebugEpochBase {
+class LLVM_SUPPORT_ABI DebugEpochBase {
   uint64_t Epoch;
 
 public:
@@ -78,7 +79,7 @@ public:
 
 #else
 
-class DebugEpochBase {
+class LLVM_SUPPORT_ABI DebugEpochBase {
 public:
   void incrementEpoch() {}
 

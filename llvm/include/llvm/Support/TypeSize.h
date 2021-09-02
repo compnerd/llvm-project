@@ -16,6 +16,7 @@
 #define LLVM_SUPPORT_TYPESIZE_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/WithColor.h"
 
@@ -29,7 +30,7 @@ namespace llvm {
 
 /// Reports a diagnostic message to indicate an invalid size request has been
 /// done on a scalable vector. This function may not return.
-void reportInvalidSizeRequest(const char *Msg);
+LLVM_SUPPORT_ABI void reportInvalidSizeRequest(const char *Msg);
 
 template <typename LeafTy> struct LinearPolyBaseTypeTraits {};
 
@@ -414,7 +415,7 @@ template <> struct LinearPolyBaseTypeTraits<TypeSize> {
 // TypeSize is used to represent the size of types. If the type is of fixed
 // size, it will represent the exact size. If the type is a scalable vector,
 // it will represent the known minimum size.
-class TypeSize : public LinearPolySize<TypeSize> {
+class LLVM_SUPPORT_ABI TypeSize : public LinearPolySize<TypeSize> {
 public:
   TypeSize(const LinearPolySize<TypeSize> &V) : LinearPolySize(V) {}
   TypeSize(ScalarTy MinVal, bool IsScalable)

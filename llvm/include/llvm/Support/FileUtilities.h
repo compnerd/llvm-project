@@ -18,6 +18,7 @@
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/Path.h"
 
 namespace llvm {
@@ -29,7 +30,7 @@ namespace llvm {
   /// option, it will set the string to an error message if an error occurs, or
   /// if the files are different.
   ///
-  int DiffFilesWithTolerance(StringRef FileA,
+  LLVM_SUPPORT_ABI int DiffFilesWithTolerance(StringRef FileA,
                              StringRef FileB,
                              double AbsTol, double RelTol,
                              std::string *Error = nullptr);
@@ -82,7 +83,7 @@ namespace llvm {
     failed_to_rename_temp_file
   };
 
-  class AtomicFileWriteError : public llvm::ErrorInfo<AtomicFileWriteError> {
+  class LLVM_SUPPORT_ABI AtomicFileWriteError : public llvm::ErrorInfo<AtomicFileWriteError> {
   public:
     AtomicFileWriteError(atomic_write_error Error) : Error(Error) {}
 
@@ -104,10 +105,10 @@ namespace llvm {
   /// writes content of \p Buffer to the file and renames it to \p FinalPath.
   ///
   /// \returns \c AtomicFileWriteError in case of error.
-  llvm::Error writeFileAtomically(StringRef TempPathModel, StringRef FinalPath,
+  LLVM_SUPPORT_ABI llvm::Error writeFileAtomically(StringRef TempPathModel, StringRef FinalPath,
                                   StringRef Buffer);
 
-  llvm::Error
+  LLVM_SUPPORT_ABI llvm::Error
   writeFileAtomically(StringRef TempPathModel, StringRef FinalPath,
                       std::function<llvm::Error(llvm::raw_ostream &)> Writer);
 } // End llvm namespace

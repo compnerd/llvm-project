@@ -13,6 +13,8 @@
 #ifndef LLVM_SUPPORT_HOST_H
 #define LLVM_SUPPORT_HOST_H
 
+#include "llvm/Support/LLVMSupportExports.h"
+
 #include <string>
 
 namespace llvm {
@@ -29,18 +31,18 @@ namespace sys {
   ///   CPU_TYPE-VENDOR-OPERATING_SYSTEM
   /// or
   ///   CPU_TYPE-VENDOR-KERNEL-OPERATING_SYSTEM
-  std::string getDefaultTargetTriple();
+  LLVM_SUPPORT_ABI std::string getDefaultTargetTriple();
 
   /// getProcessTriple() - Return an appropriate target triple for generating
   /// code to be loaded into the current process, e.g. when using the JIT.
-  std::string getProcessTriple();
+  LLVM_SUPPORT_ABI std::string getProcessTriple();
 
   /// getHostCPUName - Get the LLVM name for the host CPU. The particular format
   /// of the name is target dependent, and suitable for passing as -mcpu to the
   /// target which matches the host.
   ///
   /// \return - The host CPU name, or empty if the CPU could not be determined.
-  StringRef getHostCPUName();
+  LLVM_SUPPORT_ABI StringRef getHostCPUName();
 
   /// getHostCPUFeatures - Get the LLVM names for the host CPU features.
   /// The particular format of the names are target dependent, and suitable for
@@ -52,19 +54,19 @@ namespace sys {
   /// all valid LLVM feature names.
   ///
   /// \return - True on success.
-  bool getHostCPUFeatures(StringMap<bool, MallocAllocator> &Features);
+  LLVM_SUPPORT_ABI bool getHostCPUFeatures(StringMap<bool, MallocAllocator> &Features);
 
   /// Get the number of physical cores (as opposed to logical cores returned
   /// from thread::hardware_concurrency(), which includes hyperthreads).
   /// Returns -1 if unknown for the current host system.
-  int getHostNumPhysicalCores();
+  LLVM_SUPPORT_ABI int getHostNumPhysicalCores();
 
   namespace detail {
   /// Helper functions to extract HostCPUName from /proc/cpuinfo on linux.
-  StringRef getHostCPUNameForPowerPC(StringRef ProcCpuinfoContent);
-  StringRef getHostCPUNameForARM(StringRef ProcCpuinfoContent);
-  StringRef getHostCPUNameForS390x(StringRef ProcCpuinfoContent);
-  StringRef getHostCPUNameForBPF();
+  LLVM_SUPPORT_ABI StringRef getHostCPUNameForPowerPC(StringRef ProcCpuinfoContent);
+  LLVM_SUPPORT_ABI StringRef getHostCPUNameForARM(StringRef ProcCpuinfoContent);
+  LLVM_SUPPORT_ABI StringRef getHostCPUNameForS390x(StringRef ProcCpuinfoContent);
+  LLVM_SUPPORT_ABI StringRef getHostCPUNameForBPF();
 
   /// Helper functions to extract CPU details from CPUID on x86.
   namespace x86 {

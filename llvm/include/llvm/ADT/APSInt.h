@@ -15,11 +15,13 @@
 #define LLVM_ADT_APSINT_H
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 namespace llvm {
 
 /// An arbitrary precision integer that knows its signedness.
-class LLVM_NODISCARD APSInt : public APInt {
+class LLVM_SUPPORT_ABI LLVM_NODISCARD APSInt : public APInt {
   bool IsUnsigned;
 
 public:

@@ -18,6 +18,7 @@
 
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Support/LLVMSupportExports.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -30,7 +31,7 @@ struct fltSemantics;
 /// if any). The scale represents the number of fractional bits in this type.
 /// When HasUnsignedPadding is true and this type is unsigned, the first bit
 /// in the value this represents is treated as padding.
-class FixedPointSemantics {
+class LLVM_SUPPORT_ABI FixedPointSemantics {
 public:
   FixedPointSemantics(unsigned Width, unsigned Scale, bool IsSigned,
                       bool IsSaturated, bool HasUnsignedPadding)
@@ -97,7 +98,7 @@ private:
 /// info about the fixed point type's width, sign, scale, and saturation, and
 /// provides different operations that would normally be performed on fixed point
 /// types.
-class APFixedPoint {
+class LLVM_SUPPORT_ABI APFixedPoint {
 public:
   APFixedPoint(const APInt &Val, const FixedPointSemantics &Sema)
       : Val(Val, !Sema.isSigned()), Sema(Sema) {

@@ -10,6 +10,7 @@
 #define LLVM_ADT_TRIPLE_H
 
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/LLVMSupportExports.h"
 
 // Some system headers or GCC predefined macros conflict with identifiers in
 // this file.  Undefine them here.
@@ -42,7 +43,7 @@ class VersionTuple;
 ///
 /// See autoconf/config.guess for a glimpse into what configuration names
 /// look like in practice.
-class Triple {
+class LLVM_SUPPORT_ABI Triple {
 public:
   enum ArchType {
     UnknownArch,
