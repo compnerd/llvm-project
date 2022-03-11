@@ -44,7 +44,7 @@ static void PrintStmt(raw_ostream &Out, const ASTContext *Context,
   PrintingPolicy Policy = Context->getPrintingPolicy();
   if (PolicyAdjuster)
     PolicyAdjuster(Policy);
-  S->printPretty(Out, /*Helper*/ nullptr, Policy);
+  S->printPretty(Out, /*Helper*/ nullptr, Policy, 0, "\n", Context);
 }
 
 template <typename Matcher>
@@ -128,13 +128,15 @@ TEST(StmtPrinter, TestMSIntegerLiteral) {
     "  1i8, -1i8, 1ui8, "
     "  1i16, -1i16, 1ui16, "
     "  1i32, -1i32, 1ui32, "
-    "  1i64, -1i64, 1ui64;"
+    "  1i64, -1i64, 1ui64, "
+    "  1i128, -1i128, 1ui128;"
     "}",
     FunctionBodyMatcher("A"),
     "1i8 , -1i8 , 1Ui8 , "
     "1i16 , -1i16 , 1Ui16 , "
     "1 , -1 , 1U , "
-    "1LL , -1LL , 1ULL"));
+    "1LL , -1LL , 1ULL , "
+    "1i128 , -1i128 , 1ui128"));
     // Should be: with semicolon
 }
 

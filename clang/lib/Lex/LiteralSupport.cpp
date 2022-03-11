@@ -849,7 +849,7 @@ NumericLiteralParser::NumericLiteralParser(StringRef TokSpelling,
     case 'i':
     case 'I':
       if (LangOpts.MicrosoftExt && !isFPConstant) {
-        // Allow i8, i16, i32, and i64. First, look ahead and check if
+        // Allow i8, i16, i32, i64, and i128. First, look ahead and check if
         // suffixes are Microsoft integers and not the imaginary unit.
         uint8_t Bits = 0;
         size_t ToSkip = 0;
@@ -859,7 +859,10 @@ NumericLiteralParser::NumericLiteralParser(StringRef TokSpelling,
           ToSkip = 2;
           break;
         case '1':
-          if (s[2] == '6') { // i16 suffix
+          if (s[2] == '2' && s[3] == '8') {
+            Bits = 128;
+            ToSkip = 4;
+          } else if (s[2] == '6') { // i16 suffix
             Bits = 16;
             ToSkip = 3;
           }

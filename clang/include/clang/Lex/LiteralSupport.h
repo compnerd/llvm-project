@@ -69,8 +69,8 @@ public:
   bool isImaginary : 1;     // 1.0i
   bool isFloat16 : 1;       // 1.0f16
   bool isFloat128 : 1;      // 1.0q
-  uint8_t MicrosoftInteger; // Microsoft suffix extension i8, i16, i32, or i64.
-
+  uint8_t MicrosoftInteger; // Microsoft suffix extension i8, i16, i32, i64, or
+                            // i128.
   bool isFract : 1;         // 1.0hr/r/lr/uhr/ur/ulr
   bool isAccum : 1;         // 1.0hk/k/lk/uhk/uk/ulk
 

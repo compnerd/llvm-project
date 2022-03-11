@@ -1168,9 +1168,13 @@ void StmtPrinter::VisitIntegerLiteral(IntegerLiteral *Node) {
   case BuiltinType::LongLong:  OS << "LL"; break;
   case BuiltinType::ULongLong: OS << "ULL"; break;
   case BuiltinType::Int128:
-    break; // no suffix.
+    if (Context && Context->getLangOpts().MicrosoftExt)
+      OS << "i128";
+    break;
   case BuiltinType::UInt128:
-    break; // no suffix.
+    if (Context && Context->getLangOpts().MicrosoftExt)
+      OS << "ui128";
+    break;
   }
 }
 

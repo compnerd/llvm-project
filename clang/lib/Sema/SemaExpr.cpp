@@ -3924,6 +3924,11 @@ ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
 
     // Get the value in the widest-possible width.
     unsigned MaxWidth = Context.getTargetInfo().getIntMaxTWidth();
+    // Microsoft extensions allow a maximal integer greater than `intmax_t` via
+    // the `i128` suffix, creating a 128-bit integeral value with a 64-bit
+    // maximum integer type.
+    if (Literal.MicrosoftInteger)
+      MaxWidth = Literal.MicrosoftInteger;
     llvm::APInt ResultVal(MaxWidth, 0);
 
     if (Literal.GetIntegerValue(ResultVal)) {

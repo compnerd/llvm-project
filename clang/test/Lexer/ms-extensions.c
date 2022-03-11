@@ -23,6 +23,9 @@ __complex float c3 = 1.0if;
 #define USHORT 0xffffui16
 #define UCHAR 0xffui8
 
+#define INT128_MAX  170141183460469231731687303715884105727i128
+#define UINT128_MAX 0xffffffffffffffffffffffffffffffffui128
+
 void a(void) {
 	unsigned long long m = ULLONG_MAX;
 	unsigned int n = UINT;
