@@ -6,8 +6,7 @@
 
 ; Check that we actually have relocations, otherwise this is kind of pointless.
 ; READOBJ-RELOCS:  Section ({{.*}}) .rela.debug_info {
-; READOBJ-RELOCS:    0x1B R_RISCV_ADD32 - 0x0
-; READOBJ-RELOCS-NEXT:    0x1B R_RISCV_SUB32 - 0x0
+; READOBJ-RELOCS:    0x11 R_RISCV_32 - 0x0
 ; READOBJ-RELOCS:  Section ({{.*}}) .rela.debug_frame {
 ; READOBJ-RELOCS:    0x20 R_RISCV_ADD32 - 0x0
 ; READOBJ-RELOCS-NEXT:    0x20 R_RISCV_SUB32 - 0x0
