@@ -112,6 +112,10 @@ static const RISCVSupportedExtension SupportedExperimentalExtensions[] = {
     {"ztso", RISCVExtensionVersion{0, 1}},
 };
 
+static const RISCVSupportedExtension SupportedExperimentalVendorExtensions[] = {
+    {"xsfvcp", RISCVExtensionVersion{0, 1}},
+};
+
 static bool stripExperimentalPrefix(StringRef &Ext) {
   return Ext.consume_front("experimental-");
 }
@@ -150,7 +154,8 @@ static Optional<RISCVExtensionVersion> findDefaultVersion(StringRef ExtName) {
   // Find default version of an extension.
   // TODO: We might set default version based on profile or ISA spec.
   for (auto &ExtInfo : {makeArrayRef(SupportedExtensions),
-                        makeArrayRef(SupportedExperimentalExtensions)}) {
+                        makeArrayRef(SupportedExperimentalExtensions),
+                        makeArrayRef(SupportedExperimentalVendorExtensions)}) {
     auto ExtensionInfoIterator = llvm::find_if(ExtInfo, FindByName(ExtName));
 
     if (ExtensionInfoIterator == ExtInfo.end()) {

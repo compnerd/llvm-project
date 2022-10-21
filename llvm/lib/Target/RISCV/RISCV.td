@@ -402,6 +402,14 @@ def HasStdExtZawrs : Predicate<"Subtarget->hasStdExtZawrs()">,
                                AssemblerPredicate<(all_of FeatureStdExtZawrs),
                                "'Zawrs' (Wait on Reservation Set)">;
 
+def FeatureVendorExtXsfvcp
+    : SubtargetFeature<"experimental-xsfvcp", "HasVendorExtXsfvcp", "true",
+                       "'Xsfvcp' (Vector Coprocessor Instruction Extensions)">;
+def HasVendorExtXsfvcp
+    : Predicate<"Subtarget->hasVendorExtXsfvcp()">,
+      AssemblerPredicate<(all_of FeatureVendorExtXsfvcp),
+                         "'Xsfvcp' (Vector Coprocessor Instruction Extensions)">;
+
 // Feature32Bit exists to mark CPUs that support RV32 to distinquish them from
 // tuning CPU names.
 def Feature32Bit
