@@ -3044,6 +3044,32 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
     }
     break;
   }
+  case ISD::VSCALE: {
+    Function const &F = getMachineFunction().getFunction();
+
+    Attribute const &Attr = F.getFnAttribute(Attribute::VScaleRange);
+    if (!Attr.isValid())
+      break;
+
+    std::optional<unsigned> MaxVScale = Attr.getVScaleRangeMax();
+    if (!MaxVScale.has_value())
+      break;
+
+    APInt Multiplier = Op.getConstantOperandAPInt(0);
+
+    unsigned Width = Multiplier.getSignificantBits() + Log2_32(*MaxVScale) + 1;
+    APInt VScaleResultUpperbound =
+        APInt(Width, *MaxVScale) * Multiplier.sextOrTrunc(Width);
+
+    bool Negative = VScaleResultUpperbound.isNegative();
+    if (Negative)
+      VScaleResultUpperbound = ~VScaleResultUpperbound;
+
+    unsigned RequiredBits = VScaleResultUpperbound.getActiveBits();
+    if (RequiredBits < BitWidth)
+      (Negative ? Known.One : Known.Zero).setHighBits(BitWidth - RequiredBits);
+    break;
+  }
   case ISD::CONCAT_VECTORS: {
     if (Op.getValueType().isScalableVector())
       break;
