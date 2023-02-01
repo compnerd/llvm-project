@@ -1402,6 +1402,9 @@ class X86StackFrameBuilder final {
   // Indicates if the target uses Windows CFI directives.
   bool TargetUsesWinCFI;
 
+  // Indiciates if the frame has a frame pointer.
+  bool HasFramePointer;
+
   // Indicates if we are building the frame for a funclet.
   bool IsFunclet;
 
@@ -1428,10 +1431,11 @@ class X86StackFrameBuilder final {
                                              MachineBasicBlock &) const;
 
 public:
-  X86StackFrameBuilder(MachineFunction &MF, MachineBasicBlock &MBB)
+  X86StackFrameBuilder(MachineFunction &MF, MachineBasicBlock &MBB,
+                       bool HasFramePointer)
       : F(MF.getFunction()), MF(MF), MBB(MBB), MMI(MF.getMMI()),
         STI(MF.getSubtarget<X86Subtarget>()), TII(*STI.getInstrInfo()),
-        MBBI(MBB.begin()) {
+        HasFramePointer(HasFramePointer), MBBI(MBB.begin()) {
     TargetUsesWinCFI = MF.getTarget().getMCAsmInfo()->usesWindowsCFI();
 
     IsFunclet = MBB.isEHFuncletEntry();
@@ -1563,7 +1567,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   bool FnHasClrFunclet =
       MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR;
   bool IsClrFunclet = IsFunclet && FnHasClrFunclet;
-  bool HasFP = hasFP(MF);
   bool IsWin64Prologue = isWin64Prologue(MF);
   bool NeedsDwarfCFI = needsDwarfCFI(MF);
   Register FramePtr = TRI->getFrameRegister(MF);
@@ -1572,7 +1575,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
           ? Register(getX86SubSuperRegister(FramePtr, 64)) : FramePtr;
   Register BasePtr = TRI->getBaseRegister();
 
-  X86StackFrameBuilder FB(MF, MBB);
+  X86StackFrameBuilder FB(MF, MBB, hasFP(MF));
 
   // Space reserved for stack-based arguments when making a (ABI-guaranteed)
   // tail call.
@@ -1584,7 +1587,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       STI.getTargetLowering()->hasStackProbeSymbol(MF);
   unsigned StackProbeSize = STI.getTargetLowering()->getStackProbeSize(MF);
 
-  if (HasFP && X86FI->hasSwiftAsyncContext()) {
+  if (FB.HasFramePointer && X86FI->hasSwiftAsyncContext()) {
     switch (MF.getTarget().Options.SwiftAsyncFramePointer) {
     case SwiftAsyncFramePointerMode::DeploymentBased:
       if (STI.swiftAsyncContextIsDynamicallySet()) {
@@ -1637,7 +1640,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       !MF.shouldSplitStack()) {                // Regular stack
     uint64_t MinSize =
         X86FI->getCalleeSavedFrameSize() - X86FI->getTCReturnAddrDelta();
-    if (HasFP) MinSize += SlotSize;
+    if (FB.HasFramePointer) MinSize += SlotSize;
     X86FI->setUsesRedZone(MinSize > 0 || StackSize > 0);
     StackSize = std::max(MinSize, StackSize > 128 ? StackSize - 128 : 0);
     MFI.setStackSize(StackSize);
@@ -1687,7 +1690,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     MBB.addLiveIn(Establisher);
   }
 
-  if (HasFP) {
+  if (FB.HasFramePointer) {
     assert(MF.getRegInfo().isReserved(MachineFramePtr) && "FP reserved");
 
     // Calculate required stack adjustment.
@@ -1795,7 +1798,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // Update the offset adjustment, which is mainly used by codeview to translate
   // from ESP to VFRAME relative local variable offsets.
   if (!IsFunclet) {
-    if (HasFP && TRI->hasStackRealignment(MF))
+    if (FB.HasFramePointer && TRI->hasStackRealignment(MF))
       MFI.setOffsetAdjustment(-NumBytes);
     else
       MFI.setOffsetAdjustment(-StackSize);
@@ -1819,7 +1822,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     Register Reg = FB.MBBI->getOperand(0).getReg();
     ++FB.MBBI;
 
-    if (!HasFP && NeedsDwarfCFI) {
+    if (!FB.HasFramePointer && NeedsDwarfCFI) {
       // Mark callee-saved push instruction.
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
@@ -1836,7 +1839,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // able to calculate their offsets from the frame pointer).
   // Don't do this for Win64, it needs to realign the stack after the prologue.
   if (!IsWin64Prologue && !IsFunclet && TRI->hasStackRealignment(MF)) {
-    assert(HasFP && "There should be a frame pointer if stack is realigned.");
+    assert(FB.HasFramePointer && "There should be a frame pointer if stack is realigned.");
     BuildStackAlignAND(MBB, FB.MBBI, FB.DL, StackPtr, MaxAlign);
 
     FB.EmitWinCFI(X86::SEH_StackAlign, {static_cast<int64_t>(MaxAlign)});
@@ -1949,7 +1952,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     SPOrEstablisher = StackPtr;
   }
 
-  if (IsWin64Prologue && HasFP) {
+  if (IsWin64Prologue && FB.HasFramePointer) {
     // Set RBP to a small fixed offset from RSP. In the funclet case, we base
     // this calculation on the incoming establisher, which holds the value of
     // RSP from the parent frame at the end of the prologue.
@@ -2029,7 +2032,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // able to calculate their offsets from the frame pointer).
   // Win64 requires aligning the stack after the prologue.
   if (IsWin64Prologue && TRI->hasStackRealignment(MF)) {
-    assert(HasFP && "There should be a frame pointer if stack is realigned.");
+    assert(FB.HasFramePointer && "There should be a frame pointer if stack is realigned.");
     BuildStackAlignAND(MBB, FB.MBBI, FB.DL, SPOrEstablisher, MaxAlign);
   }
 
@@ -2074,9 +2077,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  if (((!HasFP && NumBytes) || PushedRegs) && NeedsDwarfCFI) {
+  if (((!FB.HasFramePointer && NumBytes) || PushedRegs) && NeedsDwarfCFI) {
     // Mark end of stack pointer adjustment.
-    if (!HasFP && NumBytes) {
+    if (!FB.HasFramePointer && NumBytes) {
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
       BuildCFI(
