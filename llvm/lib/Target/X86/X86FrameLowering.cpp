@@ -1418,6 +1418,9 @@ class X86StackFrameBuilder final {
   // Indicates if the frame needs CFI directives to be emitted.
   bool ShouldEmitWinCFI;
 
+  // Indicates if the frame needs CFI directives to be emitted.
+  bool ShouldEmitDWARFCFI;
+
   // The insertion point for the basic block.
   MachineBasicBlock::iterator MBBI;
 
@@ -1447,7 +1450,9 @@ public:
                                                                   64))
                                 : FramePointer),
         MBBI(MBB.begin()) {
-    TargetUsesWinCFI = MF.getTarget().getMCAsmInfo()->usesWindowsCFI();
+    const MCAsmInfo *MAI = MF.getTarget().getMCAsmInfo();
+
+    TargetUsesWinCFI = MAI->usesWindowsCFI();
 
     IsFunclet = MBB.isEHFuncletEntry();
 
@@ -1459,6 +1464,8 @@ public:
     // to emit FPO data.
     ShouldEmitWinCFI =
         (TargetUsesWinCFI && F.needsUnwindTableEntry()) || ShouldEmitWinFPO;
+
+    ShouldEmitDWARFCFI = !MAI->usesWindowsCFI() && MF.needsFrameMoves();
   }
 
 private:
@@ -1652,7 +1659,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR;
   bool IsClrFunclet = IsFunclet && FnHasClrFunclet;
   bool IsWin64Prologue = isWin64Prologue(MF);
-  bool NeedsDwarfCFI = needsDwarfCFI(MF);
+
   Register BasePtr = TRI->getBaseRegister();
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF));
@@ -1763,7 +1770,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       .addReg(FB.MachineFramePointer, RegState::Kill)
       .setMIFlag(MachineInstr::FrameSetup);
 
-    if (NeedsDwarfCFI) {
+    if (FB.ShouldEmitDWARFCFI) {
       // Mark the place where EBP/RBP was saved.
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
@@ -1793,7 +1800,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
               .addReg(StackPtr)
               .setMIFlag(MachineInstr::FrameSetup);
 
-        if (NeedsDwarfCFI) {
+        if (FB.ShouldEmitDWARFCFI) {
           // Mark effective beginning of when frame pointer becomes valid.
           // Define the current CFA to use the EBP/RBP register.
           unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
@@ -1840,7 +1847,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     Register Reg = FB.MBBI->getOperand(0).getReg();
     ++FB.MBBI;
 
-    if (!FB.HasFramePointer && NeedsDwarfCFI) {
+    if (!FB.HasFramePointer && FB.ShouldEmitDWARFCFI) {
       // Mark callee-saved push instruction.
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
@@ -2095,7 +2102,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  if (((!FB.HasFramePointer && NumBytes) || PushedRegs) && NeedsDwarfCFI) {
+  if (((!FB.HasFramePointer && NumBytes) || PushedRegs) && FB.ShouldEmitDWARFCFI) {
     // Mark end of stack pointer adjustment.
     if (!FB.HasFramePointer && NumBytes) {
       // Define the current CFA rule to use the provided offset.
