@@ -1393,6 +1393,7 @@ class X86StackFrameBuilder final {
   const Function &F;
 
   MachineFunction &MF;
+  MachineFrameInfo &MFI;
   MachineBasicBlock &MBB;
   MachineModuleInfo &MMI;
 
@@ -1444,9 +1445,10 @@ class X86StackFrameBuilder final {
 public:
   X86StackFrameBuilder(MachineFunction &MF, MachineBasicBlock &MBB,
                        bool HasFramePointer)
-      : F(MF.getFunction()), MF(MF), MBB(MBB), MMI(MF.getMMI()),
-        STI(MF.getSubtarget<X86Subtarget>()), TII(*STI.getInstrInfo()),
-        TRI(STI.getRegisterInfo()), TFI(MF.getInfo<X86MachineFunctionInfo>()),
+      : F(MF.getFunction()), MF(MF), MFI(MF.getFrameInfo()), MBB(MBB),
+        MMI(MF.getMMI()), STI(MF.getSubtarget<X86Subtarget>()),
+        TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()),
+        TFI(MF.getInfo<X86MachineFunctionInfo>()),
         HasFramePointer(HasFramePointer),
         FramePointer(TRI->getFrameRegister(MF)),
         MachineFramePointer(STI.isTarget64BitILP32()
@@ -1628,6 +1630,45 @@ private:
       .addCFIIndex(CFIIndex)
       .setMIFlag(MachineInstr::FrameSetup);
   }
+
+  // TODO: remove the reference to the frame lowering.
+  // FIXME: Can we hoist `Is64Bit` into a computation in the constructor?
+  void RealignStackForInterruptCC(const X86FrameLowering &TFL, bool Is64Bit,
+                                  uint64_t &StackSize) {
+    // Re-align the stack on 64-bit if the frame is for a X86 Interrupt handler
+    // and an error code was pushed, since the x86-64 ABI requires a 16-byte
+    // stack alignment.
+
+    if (!Is64Bit)
+      return;
+
+    // Ensure that we are an x86 interrupt calling convention frame.
+    if (F.getCallingConv() != CallingConv::X86_INTR)
+      return;
+    if (F.arg_size() != 2)
+      return;
+
+    StackSize += 8;
+    MFI.setStackSize(StackSize);
+    TFL.emitSPUpdate(MBB, MBBI, DL, -8, /* InEpilogue */false);
+  }
+
+  void ClearDirectionForInterruptCC() {
+    // X86 Interrupt handlers cannot assume anything about the direction flag
+    // (DF in EFLAGS register). Clear this flag by creating `cld` instruction in
+    // each prologue of interrupt handler function.
+
+    if (F.getCallingConv() != CallingConv::X86_INTR)
+      return;
+
+    //
+    // FIXME: Create `cld` instruction only in these cases:
+    //    1. The interrupt handling function uses any of the `rep` instructions.
+    //    2. Interrupt handling function calls another function.
+    //
+    BuildMI(MBB, MBBI, DL, TII.get(X86::CLD))
+        .setMIFlag(MachineInstr::FrameSetup);
+  }
 };
 }
 
@@ -1745,16 +1786,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     report_fatal_error("Can't handle guaranteed tail call under win64 yet");
 
   FB.EncodeSwiftAsyncContextIntoFramePointer();
-
-  // Re-align the stack on 64-bit if the x86-interrupt calling convention is
-  // used and an error code was pushed, since the x86-64 ABI requires a 16-byte
-  // stack alignment.
-  if (Fn.getCallingConv() == CallingConv::X86_INTR && Is64Bit &&
-      Fn.arg_size() == 2) {
-    StackSize += 8;
-    MFI.setStackSize(StackSize);
-    emitSPUpdate(MBB, FB.MBBI, FB.DL, -8, /*InEpilogue=*/false);
-  }
+  FB.RealignStackForInterruptCC(*this, Is64Bit, StackSize);
 
   // If this is x86-64 and the Red Zone is not disabled, if we are a leaf
   // function, and use up to 128 bytes of stack space, don't have a frame
@@ -2115,17 +2147,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     emitCalleeSavedFrameMoves(MBB, FB.MBBI, FB.DL, true);
   }
 
-  // X86 Interrupt handling function cannot assume anything about the direction
-  // flag (DF in EFLAGS register). Clear this flag by creating "cld" instruction
-  // in each prologue of interrupt handler function.
-  //
-  // FIXME: Create "cld" instruction only in these cases:
-  // 1. The interrupt handling function uses any of the "rep" instructions.
-  // 2. Interrupt handling function calls another function.
-  //
-  if (Fn.getCallingConv() == CallingConv::X86_INTR)
-    BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::CLD))
-        .setMIFlag(MachineInstr::FrameSetup);
+  FB.ClearDirectionForInterruptCC();
 
   // At this point we know if the function has WinCFI or not.
   MF.setHasWinCFI(FB.HasWinCFI);
