@@ -1554,6 +1554,16 @@ private:
 
     HasWinCFI = true;
   }
+
+  void EmitDWARFCFI(MCCFIInstruction &&CFI) {
+    if (!ShouldEmitDWARFCFI)
+      return;
+
+    unsigned CFIIndex = MF.addFrameInst(CFI);
+    BuildMI(MBB, MBBI, DL, TII.get(TargetOpcode::CFI_INSTRUCTION))
+      .addCFIIndex(CFIIndex)
+      .setMIFlag(MachineInstr::FrameSetup);
+  }
 };
 }
 
@@ -1774,16 +1784,11 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       // Mark the place where EBP/RBP was saved.
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
-      BuildCFI(MBB, FB.MBBI, FB.DL,
-               MCCFIInstruction::cfiDefCfaOffset(nullptr, -2 * stackGrowth),
-               MachineInstr::FrameSetup);
+      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -2 * stackGrowth));
 
       // Change the rule for the FramePtr to be an "offset" rule.
       unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
-      BuildCFI(MBB, FB.MBBI, FB.DL,
-               MCCFIInstruction::createOffset(nullptr, DwarfFramePtr,
-                                              2 * stackGrowth),
-               MachineInstr::FrameSetup);
+      FB.EmitDWARFCFI(MCCFIInstruction::createOffset(nullptr, DwarfFramePtr, 2 * stackGrowth));
     }
 
     FB.EmitWinCFI(X86::SEH_PushReg, {FB.FramePointer});
@@ -1800,15 +1805,10 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
               .addReg(StackPtr)
               .setMIFlag(MachineInstr::FrameSetup);
 
-        if (FB.ShouldEmitDWARFCFI) {
-          // Mark effective beginning of when frame pointer becomes valid.
-          // Define the current CFA to use the EBP/RBP register.
-          unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
-          BuildCFI(
-              MBB, FB.MBBI, FB.DL,
-              MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr),
-              MachineInstr::FrameSetup);
-        }
+        // Mark effective beginning of when frame pointer becomes valid.
+        // Define the current CFA to use the EBP/RBP register.
+        unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
+        FB.EmitDWARFCFI(MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr));
 
         // .cv_fpo_setframe $FramePtr
         FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, 0});
@@ -1847,13 +1847,11 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     Register Reg = FB.MBBI->getOperand(0).getReg();
     ++FB.MBBI;
 
-    if (!FB.HasFramePointer && FB.ShouldEmitDWARFCFI) {
+    if (!FB.HasFramePointer) {
       // Mark callee-saved push instruction.
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
-      BuildCFI(MBB, FB.MBBI, FB.DL,
-               MCCFIInstruction::cfiDefCfaOffset(nullptr, -StackOffset),
-               MachineInstr::FrameSetup);
+      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -StackOffset));
       StackOffset += stackGrowth;
     }
 
@@ -2107,10 +2105,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     if (!FB.HasFramePointer && NumBytes) {
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
-      BuildCFI(
-          MBB, FB.MBBI, FB.DL,
-          MCCFIInstruction::cfiDefCfaOffset(nullptr, StackSize - stackGrowth),
-          MachineInstr::FrameSetup);
+      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, StackSize - stackGrowth));
     }
 
     // Emit DWARF info specifying the offsets of the callee-saved registers.
