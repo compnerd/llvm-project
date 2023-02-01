@@ -1412,10 +1412,17 @@ class X86StackFrameBuilder final {
 
   // Indicates if we are building the frame for a funclet.
   bool IsFunclet;
+  // Indicates if wea re building the frame for a CLR funclet.
+  bool IsCLRFunclet;
 
   // Indicates if the frame needs stack probes to be emitted.
   bool ShouldEmitStackProbe;
   unsigned StackProbeSize;
+
+  // Indicaztes the exception handling personality for the function. If the
+  // function does not have an associated personality, this will be set to
+  // `EHPersonality::Unknown`.
+  EHPersonality Personality = EHPersonality::Unknown;
 
   // Indicates if the frame needs CFI directives to be emitted for FPO.
   bool ShouldEmitWinFPO;
@@ -1461,7 +1468,12 @@ public:
 
     TargetUsesWinCFI = MAI->usesWindowsCFI();
 
+    if (F.hasPersonalityFn())
+      Personality = classifyEHPersonality(F.getPersonalityFn());
+
     IsFunclet = MBB.isEHFuncletEntry();
+    IsCLRFunclet =
+        MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR && IsFunclet;
 
     // FIXME: we should emit FPO data for funclets as well.
     ShouldEmitWinFPO =
@@ -1476,6 +1488,7 @@ public:
 
     ShouldEmitStackProbe = TLI->hasStackProbeSymbol(MF);
     StackProbeSize = TLI->getStackProbeSize(MF);
+
   }
 
 private:
@@ -1806,21 +1819,15 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
          "MF used frame lowering for wrong subtarget");
 
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  const Function &Fn = MF.getFunction();
   uint64_t MaxAlign = calculateMaxStackAlign(MF); // Desired stack alignment.
   uint64_t StackSize = MFI.getStackSize();    // Number of bytes to allocate.
-  bool IsFunclet = MBB.isEHFuncletEntry();
-  EHPersonality Personality = EHPersonality::Unknown;
-  if (Fn.hasPersonalityFn())
-    Personality = classifyEHPersonality(Fn.getPersonalityFn());
-  bool FnHasClrFunclet =
-      MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR;
-  bool IsClrFunclet = IsFunclet && FnHasClrFunclet;
   bool IsWin64Prologue = isWin64Prologue(MF);
-
   Register BasePtr = TRI->getBaseRegister();
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF));
+
+  bool FnHasClrFunclet =
+      MF.hasEHFunclets() && FB.Personality == EHPersonality::CoreCLR;
 
   // Space reserved for stack-based arguments when making a (ABI-guaranteed)
   // tail call.
@@ -1860,12 +1867,12 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Find the funclet establisher parameter
   Register Establisher = X86::NoRegister;
-  if (IsClrFunclet)
+  if (FB.IsCLRFunclet)
     Establisher = Uses64BitFramePtr ? X86::RCX : X86::ECX;
-  else if (IsFunclet)
+  else if (FB.IsFunclet)
     Establisher = Uses64BitFramePtr ? X86::RDX : X86::EDX;
 
-  if (IsWin64Prologue && IsFunclet && !IsClrFunclet) {
+  if (IsWin64Prologue && FB.IsFunclet && !FB.IsCLRFunclet) {
     // Immediately spill establisher into the home slot.
     // The runtime cares about this.
     // MOV64mr %rdx, 16(%rsp)
@@ -1910,10 +1917,10 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
     FB.EmitWinCFI(X86::SEH_PushReg, {FB.FramePointer});
 
-    if (!IsFunclet) {
+    if (!FB.IsFunclet) {
       FB.EmitSwiftAsyncContextSpill();
 
-      if (!IsWin64Prologue && !IsFunclet) {
+      if (!IsWin64Prologue && !FB.IsFunclet) {
         // Update EBP with the new base value.
         if (!FB.TFI->hasSwiftAsyncContext())
           BuildMI(MBB, FB.MBBI, FB.DL,
@@ -1932,14 +1939,14 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       }
     }
   } else {
-    assert(!IsFunclet && "funclets without FPs not yet implemented");
+    assert(!FB.IsFunclet && "funclets without FPs not yet implemented");
     NumBytes = StackSize -
                (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
   }
 
   // Update the offset adjustment, which is mainly used by codeview to translate
   // from ESP to VFRAME relative local variable offsets.
-  if (!IsFunclet) {
+  if (!FB.IsFunclet) {
     if (FB.HasFramePointer && TRI->hasStackRealignment(MF))
       MFI.setOffsetAdjustment(-NumBytes);
     else
@@ -1949,7 +1956,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // For EH funclets, only allocate enough space for outgoing calls. Save the
   // NumBytes value that we would've used for the parent frame.
   unsigned ParentFrameNumBytes = NumBytes;
-  if (IsFunclet)
+  if (FB.IsFunclet)
     NumBytes = getWinEHFuncletFrameSize(MF);
 
   // Skip the callee-saved push instructions.
@@ -1978,7 +1985,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
   // Don't do this for Win64, it needs to realign the stack after the prologue.
-  if (!IsWin64Prologue && !IsFunclet && TRI->hasStackRealignment(MF)) {
+  if (!IsWin64Prologue && !FB.IsFunclet && TRI->hasStackRealignment(MF)) {
     assert(FB.HasFramePointer && "There should be a frame pointer if stack is realigned.");
     BuildStackAlignAND(MBB, FB.MBBI, FB.DL, StackPtr, MaxAlign);
 
@@ -1993,7 +2000,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // Adjust stack pointer: ESP -= numbytes.
 
   uint64_t AlignedNumBytes = NumBytes;
-  if (IsWin64Prologue && !IsFunclet && TRI->hasStackRealignment(MF))
+  if (IsWin64Prologue && !FB.IsFunclet && TRI->hasStackRealignment(MF))
     AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
   if (AlignedNumBytes >= FB.StackProbeSize && FB.ShouldEmitStackProbe) {
     FB.EmitStackProbe(*this, StackPtr, NumBytes, Is64Bit);
@@ -2006,8 +2013,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   int SEHFrameOffset = 0;
   unsigned SPOrEstablisher;
-  if (IsFunclet) {
-    if (IsClrFunclet) {
+  if (FB.IsFunclet) {
+    if (FB.IsCLRFunclet) {
       // The establisher parameter passed to a CLR funclet is actually a pointer
       // to the (mostly empty) frame of its nearest enclosing funclet; we have
       // to find the root function establisher frame by loading the PSPSym from
@@ -2048,19 +2055,19 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
           .addReg(SPOrEstablisher);
 
     // If this is not a funclet, emit the CFI describing our frame pointer.
-    if (!IsFunclet) {
+    if (!FB.IsFunclet) {
       assert(!FB.ShouldEmitWinFPO && "this setframe incompatible with FPO data");
       FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, SEHFrameOffset});
-      if (isAsynchronousEHPersonality(Personality))
+      if (isAsynchronousEHPersonality(FB.Personality))
         MF.getWinEHFuncInfo()->SEHSetFrameOffset = SEHFrameOffset;
     }
-  } else if (IsFunclet && STI.is32Bit()) {
+  } else if (FB.IsFunclet && STI.is32Bit()) {
     // Reset EBP / ESI to something good for funclets.
     FB.MBBI = restoreWin32EHStackPointers(MBB, FB.MBBI, FB.DL);
     // If we're a catch funclet, we can be returned to via catchret. Save ESP
     // into the registration node so that the runtime will restore it for us.
     if (!MBB.isCleanupFuncletEntry()) {
-      assert(Personality == EHPersonality::MSVC_CXX);
+      assert(FB.Personality == EHPersonality::MSVC_CXX);
       Register FrameReg;
       int FI = MF.getWinEHFuncInfo()->EHRegNodeFrameIndex;
       int64_t EHRegOffset = getFrameIndexReference(MF, FI, FrameReg).getFixed();
@@ -2080,7 +2087,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       if (X86::FR64RegClass.contains(Reg)) {
         int Offset;
         Register IgnoredFrameReg;
-        if (IsWin64Prologue && IsFunclet)
+        if (IsWin64Prologue && FB.IsFunclet)
           Offset = getWin64EHFrameIndexRef(MF, FI, IgnoredFrameReg);
         else
           Offset =
@@ -2096,7 +2103,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (FB.HasWinCFI)
     FB.EmitWinCFI(X86::SEH_EndPrologue);
 
-  if (FnHasClrFunclet && !IsFunclet) {
+  if (FnHasClrFunclet && !FB.IsFunclet) {
     // Save the so-called Initial-SP (i.e. the value of the stack pointer
     // immediately after the prolog)  into the PSPSlot so that funclets
     // and the GC can recover it.
@@ -2120,7 +2127,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   }
 
   // We already dealt with stack realignment and funclets above.
-  if (IsFunclet && STI.is32Bit())
+  if (FB.IsFunclet && STI.is32Bit())
     return;
 
   // If we need a base pointer, set it up here. It's whatever the value
@@ -2143,7 +2150,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
         .setMIFlag(MachineInstr::FrameSetup);
     }
 
-    if (FB.TFI->getHasSEHFramePtrSave() && !IsFunclet) {
+    if (FB.TFI->getHasSEHFramePtrSave() && !FB.IsFunclet) {
       // Stash the value of the frame pointer relative to the base pointer for
       // Win32 EH. This supports Win32 EH, which does the inverse of the above:
       // it recovers the frame pointer from the base pointer rather than the
