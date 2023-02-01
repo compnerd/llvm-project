@@ -1537,6 +1537,10 @@ private:
   }
 
   void EmitSwiftAsyncContextSpill() {
+    // Swift async_context should not be emitted into a funclet.
+    if (IsFunclet)
+      return;
+
     if (!TFI->hasSwiftAsyncContext())
       return;
 
@@ -1988,27 +1992,24 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     }
 
     FB.EmitWinCFI(X86::SEH_PushReg, {FB.FramePointer});
+    FB.EmitSwiftAsyncContextSpill();
 
-    if (!FB.IsFunclet) {
-      FB.EmitSwiftAsyncContextSpill();
+    if (!IsWin64Prologue && !FB.IsFunclet) {
+      // Update EBP with the new base value.
+      if (!FB.TFI->hasSwiftAsyncContext())
+        BuildMI(MBB, FB.MBBI, FB.DL,
+                TII.get(Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr),
+                FB.FramePointer)
+            .addReg(StackPtr)
+            .setMIFlag(MachineInstr::FrameSetup);
 
-      if (!IsWin64Prologue && !FB.IsFunclet) {
-        // Update EBP with the new base value.
-        if (!FB.TFI->hasSwiftAsyncContext())
-          BuildMI(MBB, FB.MBBI, FB.DL,
-                  TII.get(Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr),
-                  FB.FramePointer)
-              .addReg(StackPtr)
-              .setMIFlag(MachineInstr::FrameSetup);
+      // Mark effective beginning of when frame pointer becomes valid.
+      // Define the current CFA to use the EBP/RBP register.
+      unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
+      FB.EmitDWARFCFI(MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr));
 
-        // Mark effective beginning of when frame pointer becomes valid.
-        // Define the current CFA to use the EBP/RBP register.
-        unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
-        FB.EmitDWARFCFI(MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr));
-
-        // .cv_fpo_setframe $FramePtr
-        FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, 0});
-      }
+      // .cv_fpo_setframe $FramePtr
+      FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, 0});
     }
   } else {
     assert(!FB.IsFunclet && "funclets without FPs not yet implemented");
