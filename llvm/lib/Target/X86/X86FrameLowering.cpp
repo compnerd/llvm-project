@@ -1669,6 +1669,49 @@ private:
     BuildMI(MBB, MBBI, DL, TII.get(X86::CLD))
         .setMIFlag(MachineInstr::FrameSetup);
   }
+
+  // TODO: remove the reference to the frame lowering.
+  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
+  void ConfigureRedZoneReuse(const X86FrameLowering &TFL, uint64_t SlotSize,
+                             uint64_t &StackSize) {
+    // If this is x86-64 and the Red Zone is not disabled, if we are a leaf
+    // function, and use up to 128 bytes of stack space, don't have a frame
+    // pointer, calls, or dynamic alloca then we do not need to adjust the
+    // stack pointer (we fit in the Red Zone). We also check that we don't
+    // push and pop from the stack.
+
+    if (!TFL.has128ByteRedZone(MF))
+      return;
+
+    if (TRI->hasStackRealignment(MF))
+      return;
+
+    // Use of dynamic allocas prevents redzone reuse.
+    if (MFI.hasVarSizedObjects())
+      return;
+
+    // Stack adjustments (calls) prevents redzone reuse, must be a
+    // leaf-function.
+    if (MFI.adjustsStack() || MFI.hasCopyImplyingStackAdjustment())
+      return;
+
+    // Stack Probes prevent redzone reuse due to calls.
+    if (ShouldEmitStackProbe)
+      return;
+
+    // Split stacks will prevent reuse of redzones.
+    if (MF.shouldSplitStack())
+      return;
+
+    uint64_t MinSize =
+        TFI->getCalleeSavedFrameSize() - TFI->getTCReturnAddrDelta();
+    if (HasFramePointer)
+      MinSize += SlotSize;
+
+    TFI->setUsesRedZone(MinSize > 0 || StackSize > 0);
+    StackSize = std::max(MinSize, StackSize > 128 ? StackSize - 128 : 0);
+    MFI.setStackSize(StackSize);
+  }
 };
 }
 
@@ -1787,25 +1830,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   FB.EncodeSwiftAsyncContextIntoFramePointer();
   FB.RealignStackForInterruptCC(*this, Is64Bit, StackSize);
-
-  // If this is x86-64 and the Red Zone is not disabled, if we are a leaf
-  // function, and use up to 128 bytes of stack space, don't have a frame
-  // pointer, calls, or dynamic alloca then we do not need to adjust the
-  // stack pointer (we fit in the Red Zone). We also check that we don't
-  // push and pop from the stack.
-  if (has128ByteRedZone(MF) && !TRI->hasStackRealignment(MF) &&
-      !MFI.hasVarSizedObjects() &&             // No dynamic alloca.
-      !MFI.adjustsStack() &&                   // No calls.
-      !FB.ShouldEmitStackProbe &&              // No stack probes.
-      !MFI.hasCopyImplyingStackAdjustment() && // Don't push and pop.
-      !MF.shouldSplitStack()) {                // Regular stack
-    uint64_t MinSize =
-        FB.TFI->getCalleeSavedFrameSize() - FB.TFI->getTCReturnAddrDelta();
-    if (FB.HasFramePointer) MinSize += SlotSize;
-    FB.TFI->setUsesRedZone(MinSize > 0 || StackSize > 0);
-    StackSize = std::max(MinSize, StackSize > 128 ? StackSize - 128 : 0);
-    MFI.setStackSize(StackSize);
-  }
+  FB.ConfigureRedZoneReuse(*this, SlotSize, StackSize);
 
   // Insert stack pointer adjustment for later moving of return addr.  Only
   // applies to tail call optimized functions where the callee argument stack
