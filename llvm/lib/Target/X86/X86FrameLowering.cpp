@@ -1462,6 +1462,80 @@ public:
   }
 
 private:
+  void EncodeSwiftAsyncContextIntoFramePointer() {
+    if (!HasFramePointer)
+      return;
+    if (!TFI->hasSwiftAsyncContext())
+      return;
+
+    switch (MF.getTarget().Options.SwiftAsyncFramePointer) {
+    case SwiftAsyncFramePointerMode::DeploymentBased:
+      if (STI.swiftAsyncContextIsDynamicallySet()) {
+        // The special symbol below is absolute and has a *value* suitable to be
+        // combined with the frame pointer directly.
+        BuildMI(MBB, MBBI, DL, TII.get(X86::OR64rm), MachineFramePointer)
+            .addUse(MachineFramePointer)
+            .addUse(X86::RIP)
+            .addImm(1)
+            .addUse(X86::NoRegister)
+            .addExternalSymbol("swift_async_extendedFramePointerFlags",
+                               X86II::MO_GOTPCREL)
+            .addUse(X86::NoRegister);
+        break;
+      }
+      [[fallthrough]];
+
+    case SwiftAsyncFramePointerMode::Always:
+      BuildMI(MBB, MBBI, DL, TII.get(X86::BTS64ri8), MachineFramePointer)
+          .addUse(MachineFramePointer)
+          .addImm(60)
+          .setMIFlag(MachineInstr::FrameSetup);
+      break;
+
+    case SwiftAsyncFramePointerMode::Never:
+      break;
+    }
+  }
+
+  void EmitSwiftAsyncContextSpill() {
+    if (!TFI->hasSwiftAsyncContext())
+      return;
+
+    const auto &Attrs = MF.getFunction().getAttributes();
+
+    // Before we update the live frame pointer we have to ensure there's a valid
+    // (or null) asynchronous context in its slot just before FP in the frame
+    // record, so store it now.
+    if (Attrs.hasAttrSomewhere(Attribute::SwiftAsync)) {
+      // We have an initial context in r14, store it just before the frame
+      // pointer.
+      MBB.addLiveIn(X86::R14);
+      BuildMI(MBB, MBBI, DL, TII.get(X86::PUSH64r))
+          .addReg(X86::R14)
+          .setMIFlag(MachineInstr::FrameSetup);
+    } else {
+      // No initial context, store null so that there's no pointer that
+      // could be misused.
+      BuildMI(MBB, MBBI, DL, TII.get(X86::PUSH64i8))
+          .addImm(0)
+          .setMIFlag(MachineInstr::FrameSetup);
+    }
+
+    EmitWinCFI(X86::SEH_PushReg, {X86::R14});
+
+    BuildMI(MBB, MBBI, DL, TII.get(X86::LEA64r), FramePointer)
+        .addUse(X86::RSP)
+        .addImm(1)
+        .addUse(X86::NoRegister)
+        .addImm(8)
+        .addUse(X86::NoRegister)
+        .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MBBI, DL, TII.get(X86::SUB64ri8), X86::RSP)
+        .addUse(X86::RSP)
+        .addImm(8)
+        .setMIFlag(MachineInstr::FrameSetup);
+  }
+
   void EmitWinCFI(unsigned CFI, std::initializer_list<int64_t> Args = {}) {
     if (!ShouldEmitWinCFI)
       return;
@@ -1593,35 +1667,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       STI.getTargetLowering()->hasStackProbeSymbol(MF);
   unsigned StackProbeSize = STI.getTargetLowering()->getStackProbeSize(MF);
 
-  if (FB.HasFramePointer && FB.TFI->hasSwiftAsyncContext()) {
-    switch (MF.getTarget().Options.SwiftAsyncFramePointer) {
-    case SwiftAsyncFramePointerMode::DeploymentBased:
-      if (STI.swiftAsyncContextIsDynamicallySet()) {
-        // The special symbol below is absolute and has a *value* suitable to be
-        // combined with the frame pointer directly.
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::OR64rm), FB.MachineFramePointer)
-            .addUse(FB.MachineFramePointer)
-            .addUse(X86::RIP)
-            .addImm(1)
-            .addUse(X86::NoRegister)
-            .addExternalSymbol("swift_async_extendedFramePointerFlags",
-                               X86II::MO_GOTPCREL)
-            .addUse(X86::NoRegister);
-        break;
-      }
-      [[fallthrough]];
-
-    case SwiftAsyncFramePointerMode::Always:
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::BTS64ri8), FB.MachineFramePointer)
-          .addUse(FB.MachineFramePointer)
-          .addImm(60)
-          .setMIFlag(MachineInstr::FrameSetup);
-      break;
-
-    case SwiftAsyncFramePointerMode::Never:
-      break;
-    }
-  }
+  FB.EncodeSwiftAsyncContextIntoFramePointer();
 
   // Re-align the stack on 64-bit if the x86-interrupt calling convention is
   // used and an error code was pushed, since the x86-64 ABI requires a 16-byte
@@ -1736,41 +1782,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     FB.EmitWinCFI(X86::SEH_PushReg, {FB.FramePointer});
 
     if (!IsFunclet) {
-      if (FB.TFI->hasSwiftAsyncContext()) {
-        const auto &Attrs = MF.getFunction().getAttributes();
-
-        // Before we update the live frame pointer we have to ensure there's a
-        // valid (or null) asynchronous context in its slot just before FP in
-        // the frame record, so store it now.
-        if (Attrs.hasAttrSomewhere(Attribute::SwiftAsync)) {
-          // We have an initial context in r14, store it just before the frame
-          // pointer.
-          MBB.addLiveIn(X86::R14);
-          BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::PUSH64r))
-              .addReg(X86::R14)
-              .setMIFlag(MachineInstr::FrameSetup);
-        } else {
-          // No initial context, store null so that there's no pointer that
-          // could be misused.
-          BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::PUSH64i8))
-              .addImm(0)
-              .setMIFlag(MachineInstr::FrameSetup);
-        }
-
-        FB.EmitWinCFI(X86::SEH_PushReg, {X86::R14});
-
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::LEA64r), FB.FramePointer)
-            .addUse(X86::RSP)
-            .addImm(1)
-            .addUse(X86::NoRegister)
-            .addImm(8)
-            .addUse(X86::NoRegister)
-            .setMIFlag(MachineInstr::FrameSetup);
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::SUB64ri8), X86::RSP)
-            .addUse(X86::RSP)
-            .addImm(8)
-            .setMIFlag(MachineInstr::FrameSetup);
-      }
+      FB.EmitSwiftAsyncContextSpill();
 
       if (!IsWin64Prologue && !IsFunclet) {
         // Update EBP with the new base value.
