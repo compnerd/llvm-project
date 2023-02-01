@@ -1894,17 +1894,10 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     bool isEAXAlive = isEAXLiveIn(MBB);
 
     if (isEAXAlive) {
-      if (Is64Bit) {
-        // Save RAX
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::PUSH64r))
-          .addReg(X86::RAX, RegState::Kill)
-          .setMIFlag(MachineInstr::FrameSetup);
-      } else {
-        // Save EAX
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::PUSH32r))
-          .addReg(X86::EAX, RegState::Kill)
-          .setMIFlag(MachineInstr::FrameSetup);
-      }
+      // Save eax/rax
+      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
+        .addReg(Is64Bit ? X86::RAX : X86::EAX, RegState::Kill)
+        .setMIFlag(MachineInstr::FrameSetup);
     }
 
     if (Is64Bit) {
@@ -1926,16 +1919,12 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     emitStackProbe(MF, MBB, FB.MBBI, FB.DL, true);
 
     if (isEAXAlive) {
-      // Restore RAX/EAX
-      MachineInstr *MI;
-      if (Is64Bit)
-        MI = addRegOffset(BuildMI(MF, FB.DL, TII.get(X86::MOV64rm), X86::RAX),
-                          StackPtr, false, NumBytes - 8);
-      else
-        MI = addRegOffset(BuildMI(MF, FB.DL, TII.get(X86::MOV32rm), X86::EAX),
-                          StackPtr, false, NumBytes - 4);
-      MI->setFlag(MachineInstr::FrameSetup);
-      MBB.insert(FB.MBBI, MI);
+      // Restore rax/eax
+      addRegOffset(BuildMI(FB.MBB, FB.MBBI, FB.DL,
+                           TII.get(Is64Bit ? X86::MOV64rm : X86::MOV32rm),
+                           Is64Bit ? X86::RAX : X86::EAX),
+                   StackPtr, false, NumBytes - (Is64Bit ? 8 : 4))
+        .setMIFlag(MachineInstr::FrameSetup);
     }
   } else if (NumBytes) {
     emitSPUpdate(MBB, FB.MBBI, FB.DL, -(int64_t)NumBytes, /*InEpilogue=*/false);
