@@ -1398,6 +1398,7 @@ class X86StackFrameBuilder final {
 
   const X86Subtarget &STI;
   const X86InstrInfo &TII;
+  X86MachineFunctionInfo *TFI;
 
   // Indicates if the target uses Windows CFI directives.
   bool TargetUsesWinCFI;
@@ -1435,6 +1436,7 @@ public:
                        bool HasFramePointer)
       : F(MF.getFunction()), MF(MF), MBB(MBB), MMI(MF.getMMI()),
         STI(MF.getSubtarget<X86Subtarget>()), TII(*STI.getInstrInfo()),
+        TFI(MF.getInfo<X86MachineFunctionInfo>()),
         HasFramePointer(HasFramePointer), MBBI(MBB.begin()) {
     TargetUsesWinCFI = MF.getTarget().getMCAsmInfo()->usesWindowsCFI();
 
@@ -1557,7 +1559,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   MachineFrameInfo &MFI = MF.getFrameInfo();
   const Function &Fn = MF.getFunction();
-  X86MachineFunctionInfo *X86FI = MF.getInfo<X86MachineFunctionInfo>();
   uint64_t MaxAlign = calculateMaxStackAlign(MF); // Desired stack alignment.
   uint64_t StackSize = MFI.getStackSize();    // Number of bytes to allocate.
   bool IsFunclet = MBB.isEHFuncletEntry();
@@ -1579,7 +1580,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Space reserved for stack-based arguments when making a (ABI-guaranteed)
   // tail call.
-  unsigned TailCallArgReserveSize = -X86FI->getTCReturnAddrDelta();
+  unsigned TailCallArgReserveSize = -FB.TFI->getTCReturnAddrDelta();
   if (TailCallArgReserveSize  && IsWin64Prologue)
     report_fatal_error("Can't handle guaranteed tail call under win64 yet");
 
@@ -1587,7 +1588,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       STI.getTargetLowering()->hasStackProbeSymbol(MF);
   unsigned StackProbeSize = STI.getTargetLowering()->getStackProbeSize(MF);
 
-  if (FB.HasFramePointer && X86FI->hasSwiftAsyncContext()) {
+  if (FB.HasFramePointer && FB.TFI->hasSwiftAsyncContext()) {
     switch (MF.getTarget().Options.SwiftAsyncFramePointer) {
     case SwiftAsyncFramePointerMode::DeploymentBased:
       if (STI.swiftAsyncContextIsDynamicallySet()) {
@@ -1639,9 +1640,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       !MFI.hasCopyImplyingStackAdjustment() && // Don't push and pop.
       !MF.shouldSplitStack()) {                // Regular stack
     uint64_t MinSize =
-        X86FI->getCalleeSavedFrameSize() - X86FI->getTCReturnAddrDelta();
+        FB.TFI->getCalleeSavedFrameSize() - FB.TFI->getTCReturnAddrDelta();
     if (FB.HasFramePointer) MinSize += SlotSize;
-    X86FI->setUsesRedZone(MinSize > 0 || StackSize > 0);
+    FB.TFI->setUsesRedZone(MinSize > 0 || StackSize > 0);
     StackSize = std::max(MinSize, StackSize > 128 ? StackSize - 128 : 0);
     MFI.setStackSize(StackSize);
   }
@@ -1696,11 +1697,11 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     // Calculate required stack adjustment.
     uint64_t FrameSize = StackSize - SlotSize;
     // If required, include space for extra hidden slot for stashing base pointer.
-    if (X86FI->getRestoreBasePointer())
+    if (FB.TFI->getRestoreBasePointer())
       FrameSize += SlotSize;
 
     NumBytes = FrameSize -
-               (X86FI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
+               (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
 
     // Callee-saved registers are pushed on stack before the stack is realigned.
     if (TRI->hasStackRealignment(MF) && !IsWin64Prologue)
@@ -1730,7 +1731,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     FB.EmitWinCFI(X86::SEH_PushReg, {FramePtr});
 
     if (!IsFunclet) {
-      if (X86FI->hasSwiftAsyncContext()) {
+      if (FB.TFI->hasSwiftAsyncContext()) {
         const auto &Attrs = MF.getFunction().getAttributes();
 
         // Before we update the live frame pointer we have to ensure there's a
@@ -1768,7 +1769,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
       if (!IsWin64Prologue && !IsFunclet) {
         // Update EBP with the new base value.
-        if (!X86FI->hasSwiftAsyncContext())
+        if (!FB.TFI->hasSwiftAsyncContext())
           BuildMI(MBB, FB.MBBI, FB.DL,
                   TII.get(Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr),
                   FramePtr)
@@ -1792,7 +1793,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   } else {
     assert(!IsFunclet && "funclets without FPs not yet implemented");
     NumBytes = StackSize -
-               (X86FI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
+               (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
   }
 
   // Update the offset adjustment, which is mainly used by codeview to translate
@@ -1864,7 +1865,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (IsWin64Prologue && !IsFunclet && TRI->hasStackRealignment(MF))
     AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
   if (AlignedNumBytes >= StackProbeSize && EmitStackProbeCall) {
-    assert(!X86FI->getUsesRedZone() &&
+    assert(!FB.TFI->getUsesRedZone() &&
            "The Red Zone is not accounted for in stack probes");
 
     // Check whether EAX is livein for this block.
@@ -2050,17 +2051,17 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opc), BasePtr)
       .addReg(SPOrEstablisher)
       .setMIFlag(MachineInstr::FrameSetup);
-    if (X86FI->getRestoreBasePointer()) {
+    if (FB.TFI->getRestoreBasePointer()) {
       // Stash value of base pointer.  Saving RSP instead of EBP shortens
       // dependence chain. Used by SjLj EH.
       unsigned Opm = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
       addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opm)),
-                   FramePtr, true, X86FI->getRestoreBasePointerOffset())
+                   FramePtr, true, FB.TFI->getRestoreBasePointerOffset())
         .addReg(SPOrEstablisher)
         .setMIFlag(MachineInstr::FrameSetup);
     }
 
-    if (X86FI->getHasSEHFramePtrSave() && !IsFunclet) {
+    if (FB.TFI->getHasSEHFramePtrSave() && !IsFunclet) {
       // Stash the value of the frame pointer relative to the base pointer for
       // Win32 EH. This supports Win32 EH, which does the inverse of the above:
       // it recovers the frame pointer from the base pointer rather than the
@@ -2068,7 +2069,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       unsigned Opm = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
       Register UsedReg;
       int Offset =
-          getFrameIndexReference(MF, X86FI->getSEHFramePtrSaveIndex(), UsedReg)
+          getFrameIndexReference(MF, FB.TFI->getSEHFramePtrSaveIndex(), UsedReg)
               .getFixed();
       assert(UsedReg == BasePtr);
       addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opm)), UsedReg, true, Offset)
