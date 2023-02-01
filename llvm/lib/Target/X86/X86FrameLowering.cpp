@@ -1412,6 +1412,10 @@ class X86StackFrameBuilder final {
   // Indicates if we are building the frame for a funclet.
   bool IsFunclet;
 
+  // Indicates if the frame needs stack probes to be emitted.
+  bool ShouldEmitStackProbe;
+  unsigned StackProbeSize;
+
   // Indicates if the frame needs CFI directives to be emitted for FPO.
   bool ShouldEmitWinFPO;
 
@@ -1451,6 +1455,7 @@ public:
                                 : FramePointer),
         MBBI(MBB.begin()) {
     const MCAsmInfo *MAI = MF.getTarget().getMCAsmInfo();
+    const X86TargetLowering *TLI = STI.getTargetLowering();
 
     TargetUsesWinCFI = MAI->usesWindowsCFI();
 
@@ -1466,6 +1471,9 @@ public:
         (TargetUsesWinCFI && F.needsUnwindTableEntry()) || ShouldEmitWinFPO;
 
     ShouldEmitDWARFCFI = !MAI->usesWindowsCFI() && MF.needsFrameMoves();
+
+    ShouldEmitStackProbe = TLI->hasStackProbeSymbol(MF);
+    StackProbeSize = TLI->getStackProbeSize(MF);
   }
 
 private:
@@ -1680,10 +1688,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (TailCallArgReserveSize  && IsWin64Prologue)
     report_fatal_error("Can't handle guaranteed tail call under win64 yet");
 
-  const bool EmitStackProbeCall =
-      STI.getTargetLowering()->hasStackProbeSymbol(MF);
-  unsigned StackProbeSize = STI.getTargetLowering()->getStackProbeSize(MF);
-
   FB.EncodeSwiftAsyncContextIntoFramePointer();
 
   // Re-align the stack on 64-bit if the x86-interrupt calling convention is
@@ -1704,7 +1708,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (has128ByteRedZone(MF) && !TRI->hasStackRealignment(MF) &&
       !MFI.hasVarSizedObjects() &&             // No dynamic alloca.
       !MFI.adjustsStack() &&                   // No calls.
-      !EmitStackProbeCall &&                   // No stack probes.
+      !FB.ShouldEmitStackProbe &&              // No stack probes.
       !MFI.hasCopyImplyingStackAdjustment() && // Don't push and pop.
       !MF.shouldSplitStack()) {                // Regular stack
     uint64_t MinSize =
@@ -1886,7 +1890,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t AlignedNumBytes = NumBytes;
   if (IsWin64Prologue && !IsFunclet && TRI->hasStackRealignment(MF))
     AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
-  if (AlignedNumBytes >= StackProbeSize && EmitStackProbeCall) {
+  if (AlignedNumBytes >= FB.StackProbeSize && FB.ShouldEmitStackProbe) {
     assert(!FB.TFI->getUsesRedZone() &&
            "The Red Zone is not accounted for in stack probes");
 
