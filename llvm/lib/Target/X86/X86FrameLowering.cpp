@@ -1414,6 +1414,8 @@ class X86StackFrameBuilder final {
   bool IsFunclet;
   // Indicates if wea re building the frame for a CLR funclet.
   bool IsCLRFunclet;
+  // Identifies the register that is the funclet frame establisher.
+  Register FuncletFrameEstablisher = X86::NoRegister;
 
   // Indicates if the frame needs stack probes to be emitted.
   bool ShouldEmitStackProbe;
@@ -1451,7 +1453,7 @@ class X86StackFrameBuilder final {
 
 public:
   X86StackFrameBuilder(MachineFunction &MF, MachineBasicBlock &MBB,
-                       bool HasFramePointer)
+                       bool HasFramePointer, bool Uses64BitFramePointer)
       : F(MF.getFunction()), MF(MF), MFI(MF.getFrameInfo()), MBB(MBB),
         MMI(MF.getMMI()), STI(MF.getSubtarget<X86Subtarget>()),
         TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()),
@@ -1472,8 +1474,15 @@ public:
       Personality = classifyEHPersonality(F.getPersonalityFn());
 
     IsFunclet = MBB.isEHFuncletEntry();
-    IsCLRFunclet =
-        MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR && IsFunclet;
+    if (IsFunclet) {
+      IsCLRFunclet =
+          MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR;
+
+      if (IsCLRFunclet)
+        FuncletFrameEstablisher = Uses64BitFramePointer ? X86::RCX : X86::ECX;
+      else
+        FuncletFrameEstablisher = Uses64BitFramePointer ? X86::RDX : X86::EDX;
+    }
 
     // FIXME: we should emit FPO data for funclets as well.
     ShouldEmitWinFPO =
@@ -1824,7 +1833,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   bool IsWin64Prologue = isWin64Prologue(MF);
   Register BasePtr = TRI->getBaseRegister();
 
-  X86StackFrameBuilder FB(MF, MBB, hasFP(MF));
+  X86StackFrameBuilder FB(MF, MBB, hasFP(MF), Uses64BitFramePtr);
 
   bool FnHasClrFunclet =
       MF.hasEHFunclets() && FB.Personality == EHPersonality::CoreCLR;
@@ -1865,22 +1874,15 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t NumBytes = 0;
   int stackGrowth = -SlotSize;
 
-  // Find the funclet establisher parameter
-  Register Establisher = X86::NoRegister;
-  if (FB.IsCLRFunclet)
-    Establisher = Uses64BitFramePtr ? X86::RCX : X86::ECX;
-  else if (FB.IsFunclet)
-    Establisher = Uses64BitFramePtr ? X86::RDX : X86::EDX;
-
   if (IsWin64Prologue && FB.IsFunclet && !FB.IsCLRFunclet) {
     // Immediately spill establisher into the home slot.
     // The runtime cares about this.
     // MOV64mr %rdx, 16(%rsp)
     unsigned MOVmr = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
     addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(MOVmr)), StackPtr, true, 16)
-        .addReg(Establisher)
+        .addReg(FB.FuncletFrameEstablisher)
         .setMIFlag(MachineInstr::FrameSetup);
-    MBB.addLiveIn(Establisher);
+    MBB.addLiveIn(FB.FuncletFrameEstablisher);
   }
 
   if (FB.HasFramePointer) {
@@ -2021,9 +2023,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       // the intermediate frame.
       unsigned PSPSlotOffset = getPSPSlotOffsetFromSP(MF);
       MachinePointerInfo NoInfo;
-      MBB.addLiveIn(Establisher);
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64rm), Establisher),
-                   Establisher, false, PSPSlotOffset)
+      MBB.addLiveIn(FB.FuncletFrameEstablisher);
+      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64rm), FB.FuncletFrameEstablisher),
+                   FB.FuncletFrameEstablisher, false, PSPSlotOffset)
           .addMemOperand(MF.getMachineMemOperand(
               NoInfo, MachineMemOperand::MOLoad, SlotSize, Align(SlotSize)));
       ;
@@ -2031,13 +2033,13 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       // empty) frame, in case a sub-funclet or the GC needs it.
       addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64mr)), StackPtr,
                    false, PSPSlotOffset)
-          .addReg(Establisher)
+          .addReg(FB.FuncletFrameEstablisher)
           .addMemOperand(MF.getMachineMemOperand(
               NoInfo,
               MachineMemOperand::MOStore | MachineMemOperand::MOVolatile,
               SlotSize, Align(SlotSize)));
     }
-    SPOrEstablisher = Establisher;
+    SPOrEstablisher = FB.FuncletFrameEstablisher;
   } else {
     SPOrEstablisher = StackPtr;
   }
