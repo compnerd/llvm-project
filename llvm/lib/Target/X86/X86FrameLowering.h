@@ -197,9 +197,10 @@ public:
   /// frame of the top of stack function) as part of it's ABI.
   bool has128ByteRedZone(const MachineFunction& MF) const;
 
-private:
+  unsigned getPSPSlotOffsetFromSP(const MachineFunction &MF) const;
   bool isWin64Prologue(const MachineFunction &MF) const;
 
+private:
   bool needsDwarfCFI(const MachineFunction &MF) const;
 
   uint64_t calculateMaxStackAlign(const MachineFunction &MF) const;
@@ -256,8 +257,6 @@ private:
                                            MachineBasicBlock::iterator MBBI,
                                            const DebugLoc &DL, int64_t Offset,
                                            bool InEpilogue) const;
-
-  unsigned getPSPSlotOffsetFromSP(const MachineFunction &MF) const;
 
   unsigned getWinEHFuncletFrameSize(const MachineFunction &MF) const;
 

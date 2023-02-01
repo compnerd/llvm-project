@@ -1413,7 +1413,7 @@ class X86StackFrameBuilder final {
   // Indicates if we are building the frame for a funclet.
   bool IsFunclet;
   // Indicates if wea re building the frame for a CLR funclet.
-  bool IsCLRFunclet;
+  bool IsCLRFunclet = false;
   // Identifies the register that is the funclet frame establisher.
   Register FuncletFrameEstablisher = X86::NoRegister;
 
@@ -1734,6 +1734,86 @@ private:
     StackSize = std::max(MinSize, StackSize > 128 ? StackSize - 128 : 0);
     MFI.setStackSize(StackSize);
   }
+
+  // TODO: remove the reference to the frame lowering.
+  void EmitFuncletEstablisherSpill(const X86FrameLowering &TFL,
+                                   bool Uses64BitFramePointer,
+                                   Register StackPointer) {
+    if (!TFL.isWin64Prologue(MF))
+      return;
+
+    if (!IsFunclet)
+      return;
+
+    // The CLR funclet does not need to spill the establisher.
+    if (IsCLRFunclet)
+      return;
+
+    unsigned MOVmr = Uses64BitFramePointer ? X86::MOV64mr : X86::MOV32mr;
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(MOVmr)), StackPointer, true, 16)
+        .addReg(FuncletFrameEstablisher)
+        .setMIFlag(MachineInstr::FrameSetup);
+    MBB.addLiveIn(FuncletFrameEstablisher);
+  }
+
+  // TODO: remove the reference to the frame lowering.
+  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
+  void EmitCLRFuncletRootEstablisher(const X86FrameLowering &TFL,
+                                     Register StackPointer, uint64_t SlotSize) {
+    if (!IsCLRFunclet)
+      return;
+
+    assert(IsFunclet && "CLR funclet should be classified as a funclet");
+
+    // The establisher parameter passed to a CLR funclet is actually a pointer
+    // to the (mostly empty) frame of its nearest enclosing funclet; we have to
+    // find the root function establisher frame by loading the PSPSym from the
+    // intermediate frame.
+    MachinePointerInfo NoInfo;
+    unsigned PSPSlotOffset = TFL.getPSPSlotOffsetFromSP(MF);
+
+    MBB.addLiveIn(FuncletFrameEstablisher);
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64rm),
+                         FuncletFrameEstablisher),
+                 FuncletFrameEstablisher, false, PSPSlotOffset)
+      .addMemOperand(MF.getMachineMemOperand(NoInfo, MachineMemOperand::MOLoad,
+                                             SlotSize, Align(SlotSize)));
+
+    // Save the root establisher back into the current funclet's (mostly empty)
+    // frame, in case a sub-funclet or the GC needs it.
+    auto MOFlags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)),
+                 StackPointer, false, PSPSlotOffset)
+        .addReg(FuncletFrameEstablisher)
+        .addMemOperand(MF.getMachineMemOperand(NoInfo, MOFlags, SlotSize,
+                                               Align(SlotSize)));
+  }
+
+  // TODO: remove the reference to the frame lowering.
+  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
+  void EmitCLRFuncletPSPInfo(const X86FrameLowering &TFL,
+                             Register StackPointer, uint64_t SlotSize) {
+    // We only emit the PSPInfo for the CoreCLR EH frames that are non-funclet.
+    if (IsFunclet)
+      return;
+    if (!MF.hasEHFunclets() || Personality != EHPersonality::CoreCLR)
+      return;
+
+    // Save the so-called Initial-SP (i.e. the value of the stack pointer
+    // immediately after the prolog) into the PSPSlot so that funclets and the
+    // GC can recover it.
+    const WinEHFuncInfo *WinEHInfo = MF.getWinEHFuncInfo();
+    MachinePointerInfo PSPInfo =
+        MachinePointerInfo::getFixedStack(MF, WinEHInfo->PSPSymFrameIdx);
+
+    unsigned PSPSlotOffset = TFL.getPSPSlotOffsetFromSP(MF);
+    auto MOFlags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)), StackPointer,
+                 false, PSPSlotOffset)
+        .addReg(StackPointer)
+        .addMemOperand(MF.getMachineMemOperand(PSPInfo, MOFlags, SlotSize,
+                                               Align(SlotSize)));
+  }
 };
 }
 
@@ -1835,9 +1915,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF), Uses64BitFramePtr);
 
-  bool FnHasClrFunclet =
-      MF.hasEHFunclets() && FB.Personality == EHPersonality::CoreCLR;
-
   // Space reserved for stack-based arguments when making a (ABI-guaranteed)
   // tail call.
   unsigned TailCallArgReserveSize = -FB.TFI->getTCReturnAddrDelta();
@@ -1874,16 +1951,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t NumBytes = 0;
   int stackGrowth = -SlotSize;
 
-  if (IsWin64Prologue && FB.IsFunclet && !FB.IsCLRFunclet) {
-    // Immediately spill establisher into the home slot.
-    // The runtime cares about this.
-    // MOV64mr %rdx, 16(%rsp)
-    unsigned MOVmr = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
-    addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(MOVmr)), StackPtr, true, 16)
-        .addReg(FB.FuncletFrameEstablisher)
-        .setMIFlag(MachineInstr::FrameSetup);
-    MBB.addLiveIn(FB.FuncletFrameEstablisher);
-  }
+  // Immediately spill establisher into the home slot. The runtime cares about
+  // this.
+  FB.EmitFuncletEstablisherSpill(*this, Uses64BitFramePtr, StackPtr);
 
   if (FB.HasFramePointer) {
     assert(MF.getRegInfo().isReserved(FB.MachineFramePointer) && "FP reserved");
@@ -2013,36 +2083,12 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (NumBytes)
     FB.EmitWinCFI(X86::SEH_StackAlloc, {static_cast<int64_t>(NumBytes)});
 
+  FB.EmitCLRFuncletRootEstablisher(*this, StackPtr, SlotSize);
+
   int SEHFrameOffset = 0;
-  unsigned SPOrEstablisher;
-  if (FB.IsFunclet) {
-    if (FB.IsCLRFunclet) {
-      // The establisher parameter passed to a CLR funclet is actually a pointer
-      // to the (mostly empty) frame of its nearest enclosing funclet; we have
-      // to find the root function establisher frame by loading the PSPSym from
-      // the intermediate frame.
-      unsigned PSPSlotOffset = getPSPSlotOffsetFromSP(MF);
-      MachinePointerInfo NoInfo;
-      MBB.addLiveIn(FB.FuncletFrameEstablisher);
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64rm), FB.FuncletFrameEstablisher),
-                   FB.FuncletFrameEstablisher, false, PSPSlotOffset)
-          .addMemOperand(MF.getMachineMemOperand(
-              NoInfo, MachineMemOperand::MOLoad, SlotSize, Align(SlotSize)));
-      ;
-      // Save the root establisher back into the current funclet's (mostly
-      // empty) frame, in case a sub-funclet or the GC needs it.
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64mr)), StackPtr,
-                   false, PSPSlotOffset)
-          .addReg(FB.FuncletFrameEstablisher)
-          .addMemOperand(MF.getMachineMemOperand(
-              NoInfo,
-              MachineMemOperand::MOStore | MachineMemOperand::MOVolatile,
-              SlotSize, Align(SlotSize)));
-    }
-    SPOrEstablisher = FB.FuncletFrameEstablisher;
-  } else {
-    SPOrEstablisher = StackPtr;
-  }
+  Register SPOrEstablisher =
+      FB.IsFunclet ? FB.FuncletFrameEstablisher
+                   : static_cast<Register>(StackPtr);
 
   if (IsWin64Prologue && FB.HasFramePointer) {
     // Set RBP to a small fixed offset from RSP. In the funclet case, we base
@@ -2104,21 +2150,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   if (FB.HasWinCFI)
     FB.EmitWinCFI(X86::SEH_EndPrologue);
-
-  if (FnHasClrFunclet && !FB.IsFunclet) {
-    // Save the so-called Initial-SP (i.e. the value of the stack pointer
-    // immediately after the prolog)  into the PSPSlot so that funclets
-    // and the GC can recover it.
-    unsigned PSPSlotOffset = getPSPSlotOffsetFromSP(MF);
-    auto PSPInfo = MachinePointerInfo::getFixedStack(
-        MF, MF.getWinEHFuncInfo()->PSPSymFrameIdx);
-    addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64mr)), StackPtr, false,
-                 PSPSlotOffset)
-        .addReg(StackPtr)
-        .addMemOperand(MF.getMachineMemOperand(
-            PSPInfo, MachineMemOperand::MOStore | MachineMemOperand::MOVolatile,
-            SlotSize, Align(SlotSize)));
-  }
+  FB.EmitCLRFuncletPSPInfo(*this, StackPtr, SlotSize);
 
   // Realign stack after we spilled callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
