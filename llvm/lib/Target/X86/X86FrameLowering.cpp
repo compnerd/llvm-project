@@ -1398,6 +1398,7 @@ class X86StackFrameBuilder final {
 
   const X86Subtarget &STI;
   const X86InstrInfo &TII;
+  const X86RegisterInfo *TRI;
   X86MachineFunctionInfo *TFI;
 
   // Indicates if the target uses Windows CFI directives.
@@ -1405,6 +1406,8 @@ class X86StackFrameBuilder final {
 
   // Indiciates if the frame has a frame pointer.
   bool HasFramePointer;
+  Register FramePointer;
+  const Register MachineFramePointer;
 
   // Indicates if we are building the frame for a funclet.
   bool IsFunclet;
@@ -1436,8 +1439,14 @@ public:
                        bool HasFramePointer)
       : F(MF.getFunction()), MF(MF), MBB(MBB), MMI(MF.getMMI()),
         STI(MF.getSubtarget<X86Subtarget>()), TII(*STI.getInstrInfo()),
-        TFI(MF.getInfo<X86MachineFunctionInfo>()),
-        HasFramePointer(HasFramePointer), MBBI(MBB.begin()) {
+        TRI(STI.getRegisterInfo()), TFI(MF.getInfo<X86MachineFunctionInfo>()),
+        HasFramePointer(HasFramePointer),
+        FramePointer(TRI->getFrameRegister(MF)),
+        MachineFramePointer(STI.isTarget64BitILP32()
+                                ? Register(getX86SubSuperRegister(FramePointer,
+                                                                  64))
+                                : FramePointer),
+        MBBI(MBB.begin()) {
     TargetUsesWinCFI = MF.getTarget().getMCAsmInfo()->usesWindowsCFI();
 
     IsFunclet = MBB.isEHFuncletEntry();
@@ -1570,10 +1579,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   bool IsClrFunclet = IsFunclet && FnHasClrFunclet;
   bool IsWin64Prologue = isWin64Prologue(MF);
   bool NeedsDwarfCFI = needsDwarfCFI(MF);
-  Register FramePtr = TRI->getFrameRegister(MF);
-  const Register MachineFramePtr =
-      STI.isTarget64BitILP32()
-          ? Register(getX86SubSuperRegister(FramePtr, 64)) : FramePtr;
   Register BasePtr = TRI->getBaseRegister();
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF));
@@ -1594,8 +1599,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       if (STI.swiftAsyncContextIsDynamicallySet()) {
         // The special symbol below is absolute and has a *value* suitable to be
         // combined with the frame pointer directly.
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::OR64rm), MachineFramePtr)
-            .addUse(MachineFramePtr)
+        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::OR64rm), FB.MachineFramePointer)
+            .addUse(FB.MachineFramePointer)
             .addUse(X86::RIP)
             .addImm(1)
             .addUse(X86::NoRegister)
@@ -1607,8 +1612,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       [[fallthrough]];
 
     case SwiftAsyncFramePointerMode::Always:
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::BTS64ri8), MachineFramePtr)
-          .addUse(MachineFramePtr)
+      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::BTS64ri8), FB.MachineFramePointer)
+          .addUse(FB.MachineFramePointer)
           .addImm(60)
           .setMIFlag(MachineInstr::FrameSetup);
       break;
@@ -1692,7 +1697,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   }
 
   if (FB.HasFramePointer) {
-    assert(MF.getRegInfo().isReserved(MachineFramePtr) && "FP reserved");
+    assert(MF.getRegInfo().isReserved(FB.MachineFramePointer) && "FP reserved");
 
     // Calculate required stack adjustment.
     uint64_t FrameSize = StackSize - SlotSize;
@@ -1709,7 +1714,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
     // Save EBP/RBP into the appropriate stack slot.
     BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
-      .addReg(MachineFramePtr, RegState::Kill)
+      .addReg(FB.MachineFramePointer, RegState::Kill)
       .setMIFlag(MachineInstr::FrameSetup);
 
     if (NeedsDwarfCFI) {
@@ -1721,14 +1726,14 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
                MachineInstr::FrameSetup);
 
       // Change the rule for the FramePtr to be an "offset" rule.
-      unsigned DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
+      unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
       BuildCFI(MBB, FB.MBBI, FB.DL,
                MCCFIInstruction::createOffset(nullptr, DwarfFramePtr,
                                               2 * stackGrowth),
                MachineInstr::FrameSetup);
     }
 
-    FB.EmitWinCFI(X86::SEH_PushReg, {FramePtr});
+    FB.EmitWinCFI(X86::SEH_PushReg, {FB.FramePointer});
 
     if (!IsFunclet) {
       if (FB.TFI->hasSwiftAsyncContext()) {
@@ -1754,7 +1759,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
         FB.EmitWinCFI(X86::SEH_PushReg, {X86::R14});
 
-        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::LEA64r), FramePtr)
+        BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::LEA64r), FB.FramePointer)
             .addUse(X86::RSP)
             .addImm(1)
             .addUse(X86::NoRegister)
@@ -1772,14 +1777,14 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
         if (!FB.TFI->hasSwiftAsyncContext())
           BuildMI(MBB, FB.MBBI, FB.DL,
                   TII.get(Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr),
-                  FramePtr)
+                  FB.FramePointer)
               .addReg(StackPtr)
               .setMIFlag(MachineInstr::FrameSetup);
 
         if (NeedsDwarfCFI) {
           // Mark effective beginning of when frame pointer becomes valid.
           // Define the current CFA to use the EBP/RBP register.
-          unsigned DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
+          unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
           BuildCFI(
               MBB, FB.MBBI, FB.DL,
               MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr),
@@ -1787,7 +1792,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
         }
 
         // .cv_fpo_setframe $FramePtr
-        FB.EmitWinCFI(X86::SEH_SetFrame, {FramePtr, 0});
+        FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, 0});
       }
     }
   } else {
@@ -1959,16 +1964,16 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     // RSP from the parent frame at the end of the prologue.
     SEHFrameOffset = calculateSetFPREG(ParentFrameNumBytes);
     if (SEHFrameOffset)
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::LEA64r), FramePtr),
+      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::LEA64r), FB.FramePointer),
                    SPOrEstablisher, false, SEHFrameOffset);
     else
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64rr), FramePtr)
+      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64rr), FB.FramePointer)
           .addReg(SPOrEstablisher);
 
     // If this is not a funclet, emit the CFI describing our frame pointer.
     if (!IsFunclet) {
       assert(!FB.ShouldEmitWinFPO && "this setframe incompatible with FPO data");
-      FB.EmitWinCFI(X86::SEH_SetFrame, {FramePtr, SEHFrameOffset});
+      FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, SEHFrameOffset});
       if (isAsynchronousEHPersonality(Personality))
         MF.getWinEHFuncInfo()->SEHSetFrameOffset = SEHFrameOffset;
     }
@@ -2056,7 +2061,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       // dependence chain. Used by SjLj EH.
       unsigned Opm = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
       addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opm)),
-                   FramePtr, true, FB.TFI->getRestoreBasePointerOffset())
+                   FB.FramePointer, true, FB.TFI->getRestoreBasePointerOffset())
         .addReg(SPOrEstablisher)
         .setMIFlag(MachineInstr::FrameSetup);
     }
@@ -2073,7 +2078,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
               .getFixed();
       assert(UsedReg == BasePtr);
       addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opm)), UsedReg, true, Offset)
-          .addReg(FramePtr)
+          .addReg(FB.FramePointer)
           .setMIFlag(MachineInstr::FrameSetup);
     }
   }
