@@ -1551,6 +1551,62 @@ private:
         .setMIFlag(MachineInstr::FrameSetup);
   }
 
+  // TODO: remove the reference to the frame lowering.
+  // FIXME: Can we hoist `Is64Bit` into a computation in the constructor?
+  void EmitStackProbe(const X86FrameLowering &TFL, Register StackPointer,
+                      uint64_t NumBytes, bool Is64Bit) {
+    if (!ShouldEmitStackProbe)
+      return;
+
+    // Windows, cygwin, and MinGW require a prologue helper routine when
+    // allocating more than 4K bytes on the stack. Windows uses `__chkstk` and
+    // cygwin/MinGW use `__alloca`. `__alloca` and the 32-bit version of
+    // `__chkstk` will probe the stack and adjust the stack pointer in one go.
+    // The 64-bit version of `__chkstk` is only responsible for probing the
+    // stack. The 64-bit prologue is responsible for adjusting the stack
+    // pointer. Touching the stack at 4K increments is necessary to ensure that
+    // the guard pages used by the OS virtual memory manager are allocated in
+    // correct sequence.
+
+    assert(!TFI->getUsesRedZone() &&
+           "The Red Zone is not accounted for in stack probes");
+
+    // Check whether eax is livein for this block.
+    bool IsEAXLiveIn = isEAXLiveIn(MBB);
+
+    // Save eax/rax if it is a live-in.
+    if (IsEAXLiveIn)
+      BuildMI(MBB, MBBI, DL, TII.get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
+          .addReg(Is64Bit ? X86::RAX : X86::EAX, RegState::Kill)
+          .setMIFlag(MachineInstr::FrameSetup);
+
+    if (Is64Bit) {
+      // Handle the 64-bit Windows ABI case where we need to call `__chkstk`.
+      // The function prologue is responsible for adjusting the stack pointer.
+      int64_t Alloc = IsEAXLiveIn ? NumBytes - 8 : NumBytes;
+      BuildMI(MBB, MBBI, DL, TII.get(getMOVriOpcode(Is64Bit, Alloc)), X86::RAX)
+          .addImm(Alloc)
+          .setMIFlag(MachineInstr::FrameSetup);
+    } else {
+      // Allocate NumBytes - 4 bytes on the stack in case of eax being a livein.
+      // We'll also use 4 already allocated bytes for eax.
+      BuildMI(MBB, MBBI, DL, TII.get(X86::MOV32ri), X86::EAX)
+        .addImm(IsEAXLiveIn ? NumBytes - 4 : NumBytes)
+        .setMIFlag(MachineInstr::FrameSetup);
+    }
+
+    // Call `__chkstk`, `__chkstk_ms`, or `__alloca`.
+    TFL.emitStackProbe(MF, MBB, MBBI, DL, true);
+
+    // Restore eax/rax if lt is a live-in.
+    if (IsEAXLiveIn)
+      addRegOffset(BuildMI(MBB, MBBI, DL,
+                           TII.get(Is64Bit ? X86::MOV64rm : X86::MOV32rm),
+                           Is64Bit ? X86::RAX : X86::EAX),
+                   StackPointer, false, NumBytes - (Is64Bit ? 8 : 4))
+            .setMIFlag(MachineInstr::FrameSetup);
+  }
+
   void EmitWinCFI(unsigned CFI, std::initializer_list<int64_t> Args = {}) {
     if (!ShouldEmitWinCFI)
       return;
@@ -1879,57 +1935,11 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Adjust stack pointer: ESP -= numbytes.
 
-  // Windows and cygwin/mingw require a prologue helper routine when allocating
-  // more than 4K bytes on the stack.  Windows uses __chkstk and cygwin/mingw
-  // uses __alloca.  __alloca and the 32-bit version of __chkstk will probe the
-  // stack and adjust the stack pointer in one go.  The 64-bit version of
-  // __chkstk is only responsible for probing the stack.  The 64-bit prologue is
-  // responsible for adjusting the stack pointer.  Touching the stack at 4K
-  // increments is necessary to ensure that the guard pages used by the OS
-  // virtual memory manager are allocated in correct sequence.
   uint64_t AlignedNumBytes = NumBytes;
   if (IsWin64Prologue && !IsFunclet && TRI->hasStackRealignment(MF))
     AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
   if (AlignedNumBytes >= FB.StackProbeSize && FB.ShouldEmitStackProbe) {
-    assert(!FB.TFI->getUsesRedZone() &&
-           "The Red Zone is not accounted for in stack probes");
-
-    // Check whether EAX is livein for this block.
-    bool isEAXAlive = isEAXLiveIn(MBB);
-
-    if (isEAXAlive) {
-      // Save eax/rax
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
-        .addReg(Is64Bit ? X86::RAX : X86::EAX, RegState::Kill)
-        .setMIFlag(MachineInstr::FrameSetup);
-    }
-
-    if (Is64Bit) {
-      // Handle the 64-bit Windows ABI case where we need to call __chkstk.
-      // Function prologue is responsible for adjusting the stack pointer.
-      int64_t Alloc = isEAXAlive ? NumBytes - 8 : NumBytes;
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(getMOVriOpcode(Is64Bit, Alloc)), X86::RAX)
-          .addImm(Alloc)
-          .setMIFlag(MachineInstr::FrameSetup);
-    } else {
-      // Allocate NumBytes-4 bytes on stack in case of isEAXAlive.
-      // We'll also use 4 already allocated bytes for EAX.
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV32ri), X86::EAX)
-          .addImm(isEAXAlive ? NumBytes - 4 : NumBytes)
-          .setMIFlag(MachineInstr::FrameSetup);
-    }
-
-    // Call __chkstk, __chkstk_ms, or __alloca.
-    emitStackProbe(MF, MBB, FB.MBBI, FB.DL, true);
-
-    if (isEAXAlive) {
-      // Restore rax/eax
-      addRegOffset(BuildMI(FB.MBB, FB.MBBI, FB.DL,
-                           TII.get(Is64Bit ? X86::MOV64rm : X86::MOV32rm),
-                           Is64Bit ? X86::RAX : X86::EAX),
-                   StackPtr, false, NumBytes - (Is64Bit ? 8 : 4))
-        .setMIFlag(MachineInstr::FrameSetup);
-    }
+    FB.EmitStackProbe(*this, StackPtr, NumBytes, Is64Bit);
   } else if (NumBytes) {
     emitSPUpdate(MBB, FB.MBBI, FB.DL, -(int64_t)NumBytes, /*InEpilogue=*/false);
   }
