@@ -2054,24 +2054,23 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF), Uses64BitFramePtr);
 
-  // Space reserved for stack-based arguments when making a (ABI-guaranteed)
-  // tail call.
-  unsigned TailCallArgReserveSize = -FB.TFI->getTCReturnAddrDelta();
-  if (TailCallArgReserveSize  && IsWin64Prologue)
-    report_fatal_error("Can't handle guaranteed tail call under win64 yet");
-
   FB.EncodeSwiftAsyncContextIntoFramePointer();
   FB.RealignStackForInterruptCC(*this, Is64Bit, StackSize);
   FB.ConfigureRedZoneReuse(*this, SlotSize, StackSize);
 
+  // Space reserved for stack-based arguments when making a (ABI-guaranteed)
+  // tail call.
+  int TailCallArgReserveSize = FB.TFI->getTCReturnAddrDelta();
+  if (TailCallArgReserveSize && IsWin64Prologue)
+    report_fatal_error("Can't handle guaranteed tail call under win64 yet");
+
   // Insert stack pointer adjustment for later moving of return addr.  Only
   // applies to tail call optimized functions where the callee argument stack
   // size is bigger than the callers.
-  if (TailCallArgReserveSize != 0) {
-    BuildStackAdjustment(MBB, FB.MBBI, FB.DL, -(int)TailCallArgReserveSize,
+  if (TailCallArgReserveSize)
+    BuildStackAdjustment(MBB, FB.MBBI, FB.DL, TailCallArgReserveSize,
                          /*InEpilogue=*/false)
         .setMIFlag(MachineInstr::FrameSetup);
-  }
 
   // Mapping for machine moves:
   //
@@ -2088,7 +2087,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   //        ELSE                        => DW_CFA_offset_extended
 
   uint64_t NumBytes =
-      StackSize - (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
+      StackSize - FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize;
   int stackGrowth = -SlotSize;
 
   // Immediately spill establisher into the home slot. The runtime cares about
