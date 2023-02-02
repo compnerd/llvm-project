@@ -1905,6 +1905,53 @@ private:
       }
     }
   }
+
+  // FIXME: Can we hoist `Is64Bit` into a computation in the constructor?
+  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
+  void EmitFramePointer(bool Is64Bit, bool IsWin64Prologue, uint64_t SlotSize,
+                        Register StackPointer) {
+    if (!HasFramePointer)
+      return;
+
+    assert(MF.getRegInfo().isReserved(MachineFramePointer) &&
+           "FP should be reserved");
+
+    // Save ebp/rbp into the appropriate stack slot.
+    BuildMI(MBB, MBBI, DL, TII.get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
+        .addReg(MachineFramePointer, RegState::Kill)
+        .setMIFlag(MachineInstr::FrameSetup);
+
+    // Mark the place where EBP/RBP was saved.  Define the current CFA rule to
+    // use the provided offset.
+    unsigned FPRegister = TRI->getDwarfRegNum(MachineFramePointer, true);
+    EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -2 * -SlotSize));
+    EmitDWARFCFI(MCCFIInstruction::createOffset(nullptr, FPRegister,
+                                                2 * -SlotSize));
+
+    EmitWinCFI(X86::SEH_PushReg, {FramePointer});
+
+    // Swift async_context is homed prior to the frame pointer.
+    EmitSwiftAsyncContextSpill();
+
+    if (IsWin64Prologue || IsFunclet)
+      return;
+
+    // `SwiftAsyncContextSpill` has already spilled the frame pointer after the
+    // Swift async_context.
+    if (!TFI->hasSwiftAsyncContext())
+      BuildMI(MBB, MBBI, DL,
+              TII.get(Uses64BitFramePointer ? X86::MOV64rr : X86::MOV32rr),
+              FramePointer)
+          .addReg(StackPointer)
+          .setMIFlag(MachineInstr::FrameSetup);
+
+    // Mark effective beginning of when frame pointer becomes valid.  Define the
+    // current CFA to use the EBP/RBP register.
+    EmitDWARFCFI(MCCFIInstruction::createDefCfaRegister(nullptr, FPRegister));
+
+    // .cv_fpo_setframe $FramePtr
+    EmitWinCFI(X86::SEH_SetFrame, {FramePointer, 0});
+  }
 };
 }
 
@@ -2046,57 +2093,22 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   FB.EmitFuncletEstablisherSpill(*this, Uses64BitFramePtr, StackPtr);
 
   if (FB.HasFramePointer) {
-    assert(MF.getRegInfo().isReserved(FB.MachineFramePointer) && "FP reserved");
-
     // Calculate required stack adjustment.
     uint64_t FrameSize = StackSize - SlotSize;
-    // If required, include space for extra hidden slot for stashing base pointer.
+
+    // Include space for extra hidden slot for the base pointer, if needed.
     if (FB.TFI->getRestoreBasePointer())
       FrameSize += SlotSize;
 
-    NumBytes = FrameSize -
-               (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
+    NumBytes =
+        FrameSize - (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
 
-    // Callee-saved registers are pushed on stack before the stack is realigned.
+    // Callee-saved registers are pushed on the stack before the stack is
+    // realigned.
     if (TRI->hasStackRealignment(MF) && !IsWin64Prologue)
       NumBytes = alignTo(NumBytes, MaxAlign);
 
-    // Save EBP/RBP into the appropriate stack slot.
-    BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
-      .addReg(FB.MachineFramePointer, RegState::Kill)
-      .setMIFlag(MachineInstr::FrameSetup);
-
-    if (FB.ShouldEmitDWARFCFI) {
-      // Mark the place where EBP/RBP was saved.
-      // Define the current CFA rule to use the provided offset.
-      assert(StackSize);
-      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -2 * stackGrowth));
-
-      // Change the rule for the FramePtr to be an "offset" rule.
-      unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
-      FB.EmitDWARFCFI(MCCFIInstruction::createOffset(nullptr, DwarfFramePtr, 2 * stackGrowth));
-    }
-
-    FB.EmitWinCFI(X86::SEH_PushReg, {FB.FramePointer});
-    FB.EmitSwiftAsyncContextSpill();
-
-    if (!IsWin64Prologue && !FB.IsFunclet) {
-      // Update EBP with the new base value.
-      if (!FB.TFI->hasSwiftAsyncContext())
-        BuildMI(MBB, FB.MBBI, FB.DL,
-                TII.get(Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr),
-                FB.FramePointer)
-            .addReg(StackPtr)
-            .setMIFlag(MachineInstr::FrameSetup);
-
-      // Mark effective beginning of when frame pointer becomes valid.
-      // Define the current CFA to use the EBP/RBP register.
-      unsigned DwarfFramePtr = TRI->getDwarfRegNum(FB.MachineFramePointer, true);
-      FB.EmitDWARFCFI(MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr));
-
-      // .cv_fpo_setframe $FramePtr
-      FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, 0});
-    }
+    FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
   } else {
     assert(!FB.IsFunclet && "funclets without FPs not yet implemented");
     NumBytes = StackSize -
