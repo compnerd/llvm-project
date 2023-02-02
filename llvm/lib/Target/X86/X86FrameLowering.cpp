@@ -1818,6 +1818,28 @@ private:
         .addMemOperand(MF.getMachineMemOperand(PSPInfo, MOFlags, SlotSize,
                                                Align(SlotSize)));
   }
+
+  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
+  void EmitCFIForRegisterSpills(uint64_t SlotSize,
+                                bool &HasSpills, int &StackOffset) {
+    MachineBasicBlock::iterator MBBE = MBB.end();
+    while (MBBI != MBBE && MBBI->getFlag(MachineInstr::FrameSetup) &&
+           (MBBI->getOpcode() == X86::PUSH32r ||
+            MBBI->getOpcode() == X86::PUSH64r)) {
+      Register Reg = MBBI->getOperand(0).getReg();
+      ++MBBI;
+
+      if (!HasFramePointer) {
+        // Mark callee-saved push instruction. Define the current CFA rule to
+        // use the provided offset.
+        EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -StackOffset));
+        StackOffset += -SlotSize;
+      }
+      EmitWinCFI(X86::SEH_PushReg, {Reg});
+
+      HasSpills = true;
+    }
+  }
 };
 }
 
@@ -2036,24 +2058,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   bool PushedRegs = false;
   int StackOffset = 2 * stackGrowth;
 
-  while (FB.MBBI != MBB.end() &&
-         FB.MBBI->getFlag(MachineInstr::FrameSetup) &&
-         (FB.MBBI->getOpcode() == X86::PUSH32r ||
-          FB.MBBI->getOpcode() == X86::PUSH64r)) {
-    PushedRegs = true;
-    Register Reg = FB.MBBI->getOperand(0).getReg();
-    ++FB.MBBI;
-
-    if (!FB.HasFramePointer) {
-      // Mark callee-saved push instruction.
-      // Define the current CFA rule to use the provided offset.
-      assert(StackSize);
-      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -StackOffset));
-      StackOffset += stackGrowth;
-    }
-
-    FB.EmitWinCFI(X86::SEH_PushReg, {Reg});
-  }
+  FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs, StackOffset);
 
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
