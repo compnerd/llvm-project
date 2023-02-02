@@ -1407,6 +1407,7 @@ class X86StackFrameBuilder final {
 
   // Indiciates if the frame has a frame pointer.
   bool HasFramePointer;
+  bool Uses64BitFramePointer;
   Register FramePointer;
   const Register MachineFramePointer;
 
@@ -1459,6 +1460,7 @@ public:
         TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()),
         TFI(MF.getInfo<X86MachineFunctionInfo>()),
         HasFramePointer(HasFramePointer),
+        Uses64BitFramePointer(Uses64BitFramePointer),
         FramePointer(TRI->getFrameRegister(MF)),
         MachineFramePointer(STI.isTarget64BitILP32()
                                 ? Register(getX86SubSuperRegister(FramePointer,
@@ -1840,6 +1842,47 @@ private:
       HasSpills = true;
     }
   }
+
+  void EmitBasePointerSetup(const X86FrameLowering &TLF,
+                            Register StackPointer) {
+    if (!TRI->hasBasePointer(MF))
+      return;
+
+    // Update the base pointer with the current stack pointer.
+    BuildMI(MBB, MBBI, DL,
+            TII.get(Uses64BitFramePointer ? X86::MOV64rr : X86::MOV32rr),
+            TRI->getBaseRegister())
+      .addReg(StackPointer)
+      .setMIFlag(MachineInstr::FrameSetup);
+
+    // Stash value of base pointer. Saving RSP instead of EBP shortens
+    // dependence chain. Used by SjLj EH.
+    if (TFI->getRestoreBasePointer())
+      addRegOffset(BuildMI(MBB, MBBI, DL,
+                           TII.get(Uses64BitFramePointer ? X86::MOV64mr
+                                                         : X86::MOV32mr)),
+                   FramePointer, true, TFI->getRestoreBasePointerOffset())
+          .addReg(StackPointer)
+          .setMIFlag(MachineInstr::FrameSetup);
+
+    // Stash the value of the frame pointer relative to the base pointer for
+    // Win32 EH. This supports Win32 EH, which does the inverse of the above: it
+    // recovers the frame pointer from the base pointer rather than the other
+    // way around.
+    if (TFI->getHasSEHFramePtrSave() && !IsFunclet) {
+      Register Reg;
+      int Offset =
+          TLF.getFrameIndexReference(MF, TFI->getSEHFramePtrSaveIndex(), Reg)
+              .getFixed();
+      assert(Reg == TRI->getBaseRegister());
+      addRegOffset(BuildMI(MBB, MBBI, DL,
+                           TII.get(Uses64BitFramePointer ? X86::MOV64mr
+                                                         : X86::MOV32mr)),
+                   Reg, true, Offset)
+        .addReg(FramePointer)
+        .setMIFlag(MachineInstr::FrameSetup);
+    }
+  }
 };
 }
 
@@ -1937,7 +1980,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t MaxAlign = calculateMaxStackAlign(MF); // Desired stack alignment.
   uint64_t StackSize = MFI.getStackSize();    // Number of bytes to allocate.
   bool IsWin64Prologue = isWin64Prologue(MF);
-  Register BasePtr = TRI->getBaseRegister();
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF), Uses64BitFramePtr);
 
@@ -2170,42 +2212,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (FB.IsFunclet && STI.is32Bit())
     return;
 
-  // If we need a base pointer, set it up here. It's whatever the value
-  // of the stack pointer is at this point. Any variable size objects
-  // will be allocated after this, so we can still use the base pointer
-  // to reference locals.
-  if (TRI->hasBasePointer(MF)) {
-    // Update the base pointer with the current stack pointer.
-    unsigned Opc = Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr;
-    BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opc), BasePtr)
-      .addReg(SPOrEstablisher)
-      .setMIFlag(MachineInstr::FrameSetup);
-    if (FB.TFI->getRestoreBasePointer()) {
-      // Stash value of base pointer.  Saving RSP instead of EBP shortens
-      // dependence chain. Used by SjLj EH.
-      unsigned Opm = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opm)),
-                   FB.FramePointer, true, FB.TFI->getRestoreBasePointerOffset())
-        .addReg(SPOrEstablisher)
-        .setMIFlag(MachineInstr::FrameSetup);
-    }
-
-    if (FB.TFI->getHasSEHFramePtrSave() && !FB.IsFunclet) {
-      // Stash the value of the frame pointer relative to the base pointer for
-      // Win32 EH. This supports Win32 EH, which does the inverse of the above:
-      // it recovers the frame pointer from the base pointer rather than the
-      // other way around.
-      unsigned Opm = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
-      Register UsedReg;
-      int Offset =
-          getFrameIndexReference(MF, FB.TFI->getSEHFramePtrSaveIndex(), UsedReg)
-              .getFixed();
-      assert(UsedReg == BasePtr);
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(Opm)), UsedReg, true, Offset)
-          .addReg(FB.FramePointer)
-          .setMIFlag(MachineInstr::FrameSetup);
-    }
-  }
+  FB.EmitBasePointerSetup(*this, SPOrEstablisher);
 
   if (((!FB.HasFramePointer && NumBytes) || PushedRegs) && FB.ShouldEmitDWARFCFI) {
     // Mark end of stack pointer adjustment.
