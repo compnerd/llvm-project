@@ -2088,7 +2088,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   uint64_t NumBytes =
       StackSize - FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize;
-  int stackGrowth = -SlotSize;
 
   // Immediately spill establisher into the home slot. The runtime cares about
   // this.
@@ -2123,7 +2122,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Skip the callee-saved push instructions.
   bool PushedRegs = false;
-  int StackOffset = 2 * stackGrowth;
+  int StackOffset = -2 * SlotSize;
 
   FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs, StackOffset);
 
@@ -2223,7 +2222,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     if (!FB.HasFramePointer && NumBytes) {
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
-      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, StackSize - stackGrowth));
+      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, StackSize + SlotSize));
     }
 
     // Emit DWARF info specifying the offsets of the callee-saved registers.
