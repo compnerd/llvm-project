@@ -1883,6 +1883,28 @@ private:
         .setMIFlag(MachineInstr::FrameSetup);
     }
   }
+
+  void EmitFPRSpillCFI(const X86FrameLowering &TLF, bool IsWin64Prologue,
+                       unsigned SEHFrameOffset) {
+    MachineBasicBlock::iterator MBBE = MBB.end();
+    while (MBBI != MBBE && MBBI->getFlag(MachineInstr::FrameSetup)) {
+      const MachineInstr &MI = *MBBI;
+      ++MBBI;
+
+      int FI;
+      if (unsigned Reg = TII.isStoreToStackSlot(MI, FI)) {
+        if (X86::FR64RegClass.contains(Reg)) {
+          Register Ignored;
+          int Offset =
+              (IsWin64Prologue && IsFunclet)
+                  ? TLF.getWin64EHFrameIndexRef(MF, FI, Ignored)
+                  : (TLF.getFrameIndexReference(MF, FI, Ignored).getFixed() + SEHFrameOffset);
+          assert(!ShouldEmitWinFPO && "SEH_SaveXMM incompatible with FPO data");
+          EmitWinCFI(X86::SEH_SaveXMM, {Reg, Offset});
+        }
+      }
+    }
+  }
 };
 }
 
@@ -2174,28 +2196,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  while (FB.MBBI != MBB.end() && FB.MBBI->getFlag(MachineInstr::FrameSetup)) {
-    const MachineInstr &FrameInstr = *FB.MBBI;
-    ++FB.MBBI;
-
-    int FI;
-    if (unsigned Reg = TII.isStoreToStackSlot(FrameInstr, FI)) {
-      if (X86::FR64RegClass.contains(Reg)) {
-        int Offset;
-        Register IgnoredFrameReg;
-        if (IsWin64Prologue && FB.IsFunclet)
-          Offset = getWin64EHFrameIndexRef(MF, FI, IgnoredFrameReg);
-        else
-          Offset =
-              getFrameIndexReference(MF, FI, IgnoredFrameReg).getFixed() +
-              SEHFrameOffset;
-
-        assert(!FB.ShouldEmitWinFPO && "SEH_SaveXMM incompatible with FPO data");
-        FB.EmitWinCFI(X86::SEH_SaveXMM, {Reg, Offset});
-      }
-    }
-  }
-
+  FB.EmitFPRSpillCFI(*this, IsWin64Prologue, SEHFrameOffset);
   if (FB.HasWinCFI)
     FB.EmitWinCFI(X86::SEH_EndPrologue);
   FB.EmitCLRFuncletPSPInfo(*this, StackPtr, SlotSize);
