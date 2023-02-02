@@ -2072,6 +2072,11 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
                          /*InEpilogue=*/false)
         .setMIFlag(MachineInstr::FrameSetup);
 
+  // Immediately spill establisher into the home slot. The runtime cares about
+  // this.
+  FB.EmitFuncletEstablisherSpill(*this, StackPtr);
+  FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
+
   // Mapping for machine moves:
   //
   //   DST: VirtualFP AND
@@ -2089,10 +2094,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t NumBytes =
       StackSize - FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize;
 
-  // Immediately spill establisher into the home slot. The runtime cares about
-  // this.
-  FB.EmitFuncletEstablisherSpill(*this, StackPtr);
-
   if (FB.HasFramePointer) {
     // Include extra hidden slot for the base pointer, if needed.
     NumBytes -= (FB.TFI->getRestoreBasePointer() ? 0 : SlotSize);
@@ -2102,8 +2103,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     if (TRI->hasStackRealignment(MF) && !IsWin64Prologue)
       NumBytes = alignTo(NumBytes, MaxAlign);
   }
-
-  FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
 
   // Update the offset adjustment, which is mainly used by codeview to translate
   // from ESP to VFRAME relative local variable offsets.
