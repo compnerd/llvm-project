@@ -2102,9 +2102,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     // realigned.
     if (TRI->hasStackRealignment(MF) && !IsWin64Prologue)
       NumBytes = alignTo(NumBytes, MaxAlign);
-
-    FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
   }
+
+  FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
 
   // Update the offset adjustment, which is mainly used by codeview to translate
   // from ESP to VFRAME relative local variable offsets.
