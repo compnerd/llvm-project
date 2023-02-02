@@ -1746,7 +1746,6 @@ private:
 
   // TODO: remove the reference to the frame lowering.
   void EmitFuncletEstablisherSpill(const X86FrameLowering &TFL,
-                                   bool Uses64BitFramePointer,
                                    Register StackPointer) {
     if (!TFL.isWin64Prologue(MF))
       return;
@@ -2094,7 +2093,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Immediately spill establisher into the home slot. The runtime cares about
   // this.
-  FB.EmitFuncletEstablisherSpill(*this, Uses64BitFramePtr, StackPtr);
+  FB.EmitFuncletEstablisherSpill(*this, StackPtr);
 
   if (FB.HasFramePointer) {
     // Include extra hidden slot for the base pointer, if needed.
