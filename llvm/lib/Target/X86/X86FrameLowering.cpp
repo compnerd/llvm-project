@@ -1477,6 +1477,9 @@ public:
 
     IsFunclet = MBB.isEHFuncletEntry();
     if (IsFunclet) {
+      assert(HasFramePointer &&
+             "funclets without frame pointers not yet implemented");
+
       IsCLRFunclet =
           MF.hasEHFunclets() && Personality == EHPersonality::CoreCLR;
 
@@ -2085,7 +2088,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   //        REG < 64                    => DW_CFA_offset + Reg
   //        ELSE                        => DW_CFA_offset_extended
 
-  uint64_t NumBytes = 0;
+  uint64_t NumBytes =
+      StackSize - (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
   int stackGrowth = -SlotSize;
 
   // Immediately spill establisher into the home slot. The runtime cares about
@@ -2093,15 +2097,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   FB.EmitFuncletEstablisherSpill(*this, Uses64BitFramePtr, StackPtr);
 
   if (FB.HasFramePointer) {
-    // Calculate required stack adjustment.
-    uint64_t FrameSize = StackSize - SlotSize;
-
-    // Include space for extra hidden slot for the base pointer, if needed.
-    if (FB.TFI->getRestoreBasePointer())
-      FrameSize += SlotSize;
-
-    NumBytes =
-        FrameSize - (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
+    // Include extra hidden slot for the base pointer, if needed.
+    NumBytes -= (FB.TFI->getRestoreBasePointer() ? 0 : SlotSize);
 
     // Callee-saved registers are pushed on the stack before the stack is
     // realigned.
@@ -2109,10 +2106,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       NumBytes = alignTo(NumBytes, MaxAlign);
 
     FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
-  } else {
-    assert(!FB.IsFunclet && "funclets without FPs not yet implemented");
-    NumBytes = StackSize -
-               (FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize);
   }
 
   // Update the offset adjustment, which is mainly used by codeview to translate
