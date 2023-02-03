@@ -2068,6 +2068,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   bool IsWin64Prologue = isWin64Prologue(MF);
 
   X86StackFrameBuilder FB(MF, MBB, hasFP(MF), Uses64BitFramePtr);
+  bool PushedRegs = false;
 
   FB.EncodeSwiftAsyncContextIntoFramePointer();
   FB.RealignStackForInterruptCC(*this, Is64Bit, StackSize);
@@ -2091,6 +2092,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // this.
   FB.EmitFuncletEstablisherSpill(*this, StackPtr);
   FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
+  FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs);
 
   uint64_t NumBytes =
       StackSize - FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize;
@@ -2119,10 +2121,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     else
       MFI.setOffsetAdjustment(-StackSize);
   }
-
-  // Skip the callee-saved push instructions.
-  bool PushedRegs = false;
-  FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs);
 
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
