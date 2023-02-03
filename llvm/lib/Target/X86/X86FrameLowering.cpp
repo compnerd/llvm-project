@@ -1388,8 +1388,7 @@ bool X86FrameLowering::needsDwarfCFI(const MachineFunction &MF) const {
   return !isWin64Prologue(MF) && MF.needsFrameMoves();
 }
 
-namespace {
-class X86StackFrameBuilder final {
+class X86FrameLowering::FrameBuilder final {
   const Function &F;
 
   MachineFunction &MF;
@@ -1399,11 +1398,15 @@ class X86StackFrameBuilder final {
 
   const X86Subtarget &STI;
   const X86InstrInfo &TII;
+  const X86FrameLowering &TFL;
   const X86RegisterInfo *TRI;
   X86MachineFunctionInfo *TFI;
 
   // Indicates if the target uses Windows CFI directives.
   bool TargetUsesWinCFI;
+
+  bool Is64Bit;
+  uint64_t SlotSize;
 
   // Indiciates if the frame has a frame pointer.
   bool HasFramePointer;
@@ -1453,14 +1456,14 @@ class X86StackFrameBuilder final {
                                              MachineBasicBlock &) const;
 
 public:
-  X86StackFrameBuilder(MachineFunction &MF, MachineBasicBlock &MBB,
-                       bool HasFramePointer, bool Uses64BitFramePointer)
+  FrameBuilder(const X86FrameLowering &TFL, MachineFunction &MF,
+               MachineBasicBlock &MBB)
       : F(MF.getFunction()), MF(MF), MFI(MF.getFrameInfo()), MBB(MBB),
         MMI(MF.getMMI()), STI(MF.getSubtarget<X86Subtarget>()),
-        TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()),
-        TFI(MF.getInfo<X86MachineFunctionInfo>()),
-        HasFramePointer(HasFramePointer),
-        Uses64BitFramePointer(Uses64BitFramePointer),
+        TII(*STI.getInstrInfo()), TFL(TFL), TRI(STI.getRegisterInfo()),
+        TFI(MF.getInfo<X86MachineFunctionInfo>()), Is64Bit(STI.is64Bit()),
+        SlotSize(TRI->getSlotSize()), HasFramePointer(TFL.hasFP(MF)),
+        Uses64BitFramePointer(TFL.Uses64BitFramePtr),
         FramePointer(TRI->getFrameRegister(MF)),
         MachineFramePointer(STI.isTarget64BitILP32()
                                 ? Register(getX86SubSuperRegister(FramePointer,
@@ -1502,7 +1505,6 @@ public:
 
     ShouldEmitStackProbe = TLI->hasStackProbeSymbol(MF);
     StackProbeSize = TLI->getStackProbeSize(MF);
-
   }
 
 private:
@@ -1584,10 +1586,7 @@ private:
         .setMIFlag(MachineInstr::FrameSetup);
   }
 
-  // TODO: remove the reference to the frame lowering.
-  // FIXME: Can we hoist `Is64Bit` into a computation in the constructor?
-  void EmitStackProbe(const X86FrameLowering &TFL, Register StackPointer,
-                      uint64_t NumBytes, bool Is64Bit) {
+  void EmitStackProbe(uint64_t NumBytes) {
     if (!ShouldEmitStackProbe)
       return;
 
@@ -1636,7 +1635,7 @@ private:
       addRegOffset(BuildMI(MBB, MBBI, DL,
                            TII.get(Is64Bit ? X86::MOV64rm : X86::MOV32rm),
                            Is64Bit ? X86::RAX : X86::EAX),
-                   StackPointer, false, NumBytes - (Is64Bit ? 8 : 4))
+                   TRI->getStackRegister(), false, NumBytes - (Is64Bit ? 8 : 4))
             .setMIFlag(MachineInstr::FrameSetup);
   }
 
@@ -1676,10 +1675,7 @@ private:
       .setMIFlag(MachineInstr::FrameSetup);
   }
 
-  // TODO: remove the reference to the frame lowering.
-  // FIXME: Can we hoist `Is64Bit` into a computation in the constructor?
-  void RealignStackForInterruptCC(const X86FrameLowering &TFL, bool Is64Bit,
-                                  uint64_t &StackSize) {
+  void RealignStackForInterruptCC(uint64_t &StackSize) {
     // Re-align the stack on 64-bit if the frame is for a X86 Interrupt handler
     // and an error code was pushed, since the x86-64 ABI requires a 16-byte
     // stack alignment.
@@ -1715,10 +1711,7 @@ private:
         .setMIFlag(MachineInstr::FrameSetup);
   }
 
-  // TODO: remove the reference to the frame lowering.
-  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
-  void ConfigureRedZoneReuse(const X86FrameLowering &TFL, uint64_t SlotSize,
-                             uint64_t &StackSize) {
+  void ConfigureRedZoneReuse(uint64_t &StackSize) {
     // If this is x86-64 and the Red Zone is not disabled, if we are a leaf
     // function, and use up to 128 bytes of stack space, don't have a frame
     // pointer, calls, or dynamic alloca then we do not need to adjust the
@@ -1758,9 +1751,7 @@ private:
     MFI.setStackSize(StackSize);
   }
 
-  // TODO: remove the reference to the frame lowering.
-  void EmitFuncletEstablisherSpill(const X86FrameLowering &TFL,
-                                   Register StackPointer) {
+  void EmitFuncletEstablisherSpill() {
     if (!TFL.isWin64Prologue(MF))
       return;
 
@@ -1772,16 +1763,14 @@ private:
       return;
 
     unsigned MOVmr = Uses64BitFramePointer ? X86::MOV64mr : X86::MOV32mr;
-    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(MOVmr)), StackPointer, true, 16)
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(MOVmr)),
+                 TRI->getStackRegister(), true, 16)
         .addReg(FuncletFrameEstablisher)
         .setMIFlag(MachineInstr::FrameSetup);
     MBB.addLiveIn(FuncletFrameEstablisher);
   }
 
-  // TODO: remove the reference to the frame lowering.
-  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
-  void EmitCLRFuncletRootEstablisher(const X86FrameLowering &TFL,
-                                     Register StackPointer, uint64_t SlotSize) {
+  void EmitCLRFuncletRootEstablisher() {
     if (!IsCLRFunclet)
       return;
 
@@ -1805,16 +1794,13 @@ private:
     // frame, in case a sub-funclet or the GC needs it.
     auto MOFlags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
     addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)),
-                 StackPointer, false, PSPSlotOffset)
+                 TRI->getStackRegister(), false, PSPSlotOffset)
         .addReg(FuncletFrameEstablisher)
         .addMemOperand(MF.getMachineMemOperand(NoInfo, MOFlags, SlotSize,
                                                Align(SlotSize)));
   }
 
-  // TODO: remove the reference to the frame lowering.
-  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
-  void EmitCLRFuncletPSPInfo(const X86FrameLowering &TFL,
-                             Register StackPointer, uint64_t SlotSize) {
+  void EmitCLRFuncletPSPInfo() {
     // We only emit the PSPInfo for the CoreCLR EH frames that are non-funclet.
     if (IsFunclet)
       return;
@@ -1830,15 +1816,14 @@ private:
 
     unsigned PSPSlotOffset = TFL.getPSPSlotOffsetFromSP(MF);
     auto MOFlags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
-    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)), StackPointer,
-                 false, PSPSlotOffset)
-        .addReg(StackPointer)
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)),
+                 TRI->getStackRegister(), false, PSPSlotOffset)
+        .addReg(TRI->getStackRegister())
         .addMemOperand(MF.getMachineMemOperand(PSPInfo, MOFlags, SlotSize,
                                                Align(SlotSize)));
   }
 
-  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
-  void EmitCFIForRegisterSpills(uint64_t SlotSize, bool &HasSpills) {
+  void EmitCFIForRegisterSpills(bool &HasSpills) {
     int64_t Offset = 2 * SlotSize;
 
     MachineBasicBlock::iterator MBBE = MBB.end();
@@ -1860,8 +1845,7 @@ private:
     }
   }
 
-  void EmitBasePointerSetup(const X86FrameLowering &TLF,
-                            Register StackPointer) {
+  void EmitBasePointerSetup(Register StackPointer) {
     if (!TRI->hasBasePointer(MF))
       return;
 
@@ -1889,7 +1873,7 @@ private:
     if (TFI->getHasSEHFramePtrSave() && !IsFunclet) {
       Register Reg;
       int Offset =
-          TLF.getFrameIndexReference(MF, TFI->getSEHFramePtrSaveIndex(), Reg)
+          TFL.getFrameIndexReference(MF, TFI->getSEHFramePtrSaveIndex(), Reg)
               .getFixed();
       assert(Reg == TRI->getBaseRegister());
       addRegOffset(BuildMI(MBB, MBBI, DL,
@@ -1901,8 +1885,7 @@ private:
     }
   }
 
-  void EmitFPRSpillCFI(const X86FrameLowering &TLF, bool IsWin64Prologue,
-                       unsigned SEHFrameOffset) {
+  void EmitFPRSpillCFI(unsigned SEHFrameOffset) {
     MachineBasicBlock::iterator MBBE = MBB.end();
     while (MBBI != MBBE && MBBI->getFlag(MachineInstr::FrameSetup)) {
       const MachineInstr &MI = *MBBI;
@@ -1913,9 +1896,9 @@ private:
         if (X86::FR64RegClass.contains(Reg)) {
           Register Ignored;
           int Offset =
-              (IsWin64Prologue && IsFunclet)
-                  ? TLF.getWin64EHFrameIndexRef(MF, FI, Ignored)
-                  : (TLF.getFrameIndexReference(MF, FI, Ignored).getFixed() + SEHFrameOffset);
+              (TFL.isWin64Prologue(MF) && IsFunclet)
+                  ? TFL.getWin64EHFrameIndexRef(MF, FI, Ignored)
+                  : (TFL.getFrameIndexReference(MF, FI, Ignored).getFixed() + SEHFrameOffset);
           assert(!ShouldEmitWinFPO && "SEH_SaveXMM incompatible with FPO data");
           EmitWinCFI(X86::SEH_SaveXMM, {Reg, Offset});
         }
@@ -1923,10 +1906,7 @@ private:
     }
   }
 
-  // FIXME: Can we hoist `Is64Bit` into a computation in the constructor?
-  // FIXME: can we hoist `SlotSize` into a computation in the constructor?
-  void EmitFramePointer(bool Is64Bit, bool IsWin64Prologue, uint64_t SlotSize,
-                        Register StackPointer) {
+  void EmitFramePointer() {
     if (!HasFramePointer)
       return;
 
@@ -1950,7 +1930,7 @@ private:
     // Swift async_context is homed prior to the frame pointer.
     EmitSwiftAsyncContextSpill();
 
-    if (IsWin64Prologue || IsFunclet)
+    if (TFL.isWin64Prologue(MF) || IsFunclet)
       return;
 
     // `SwiftAsyncContextSpill` has already spilled the frame pointer after the
@@ -1959,7 +1939,7 @@ private:
       BuildMI(MBB, MBBI, DL,
               TII.get(Uses64BitFramePointer ? X86::MOV64rr : X86::MOV32rr),
               FramePointer)
-          .addReg(StackPointer)
+          .addReg(TRI->getStackRegister())
           .setMIFlag(MachineInstr::FrameSetup);
 
     // Mark effective beginning of when frame pointer becomes valid.  Define the
@@ -1970,7 +1950,7 @@ private:
     EmitWinCFI(X86::SEH_SetFrame, {FramePointer, 0});
   }
 
-  void EmitMandatoryTailCallArgumentReservation(const X86FrameLowering &TFL) {
+  void EmitMandatoryTailCallArgumentReservation() {
     int Reservation = TFI->getTCReturnAddrDelta();
     if (Reservation == 0)
       return;
@@ -1985,8 +1965,7 @@ private:
       .setMIFlag(MachineInstr::FrameSetup);
   }
 
-  void EmitEarlyStackRealignment(const X86FrameLowering &TFL,
-                                 Register StackPointer) {
+  void EmitEarlyStackRealignment() {
     // Don't do this for Win64, it needs to realign the stack after the
     // prologue.
     if (TFL.isWin64Prologue(MF))
@@ -2002,12 +1981,11 @@ private:
            "There should be a frame pointer if stack is realigned.");
 
     uint64_t Alignment = TFL.calculateMaxStackAlign(MF);
-    TFL.BuildStackAlignAND(MBB, MBBI, DL, StackPointer, Alignment);
+    TFL.BuildStackAlignAND(MBB, MBBI, DL, TRI->getStackRegister(), Alignment);
     EmitWinCFI(X86::SEH_StackAlign, {static_cast<int64_t>(Alignment)});
   }
 
-  void EmitLateStackRealignment(const X86FrameLowering &TFL,
-                                Register StackPointer) {
+  void EmitLateStackRealignment(Register StackPointer) {
     // The non-Win64 targets have performed the stack re-alignment in the early
     // phase.
     if (!TFL.isWin64Prologue(MF))
@@ -2023,7 +2001,6 @@ private:
     TFL.BuildStackAlignAND(MBB, MBBI, DL, StackPointer, Alignment);
   }
 };
-}
 
 /// emitPrologue - Push callee-saved registers onto the stack, which
 /// automatically adjust the stack pointer. Adjust the stack pointer to allocate
@@ -2120,21 +2097,21 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t StackSize = MFI.getStackSize();    // Number of bytes to allocate.
   bool IsWin64Prologue = isWin64Prologue(MF);
 
-  X86StackFrameBuilder FB(MF, MBB, hasFP(MF), Uses64BitFramePtr);
+  FrameBuilder FB(*this, MF, MBB);
   bool PushedRegs = false;
 
   FB.EncodeSwiftAsyncContextIntoFramePointer();
-  FB.RealignStackForInterruptCC(*this, Is64Bit, StackSize);
-  FB.ConfigureRedZoneReuse(*this, SlotSize, StackSize);
-  FB.EmitMandatoryTailCallArgumentReservation(*this);
+  FB.RealignStackForInterruptCC(StackSize);
+  FB.ConfigureRedZoneReuse(StackSize);
+  FB.EmitMandatoryTailCallArgumentReservation();
   // Immediately spill establisher into the home slot. The runtime cares about
   // this.
-  FB.EmitFuncletEstablisherSpill(*this, StackPtr);
-  FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
-  FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs);
+  FB.EmitFuncletEstablisherSpill();
+  FB.EmitFramePointer();
+  FB.EmitCFIForRegisterSpills(PushedRegs);
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
-  FB.EmitEarlyStackRealignment(*this, StackPtr);
+  FB.EmitEarlyStackRealignment();
 
   uint64_t NumBytes = StackSize
                     - FB.TFI->getCalleeSavedFrameSize()
@@ -2177,7 +2154,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
 
   if (AlignedNumBytes >= FB.StackProbeSize && FB.ShouldEmitStackProbe) {
-    FB.EmitStackProbe(*this, StackPtr, NumBytes, Is64Bit);
+    FB.EmitStackProbe(NumBytes);
   } else if (NumBytes) {
     emitSPUpdate(MBB, FB.MBBI, FB.DL, -(int64_t)NumBytes, /*InEpilogue=*/false);
   }
@@ -2185,7 +2162,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (NumBytes)
     FB.EmitWinCFI(X86::SEH_StackAlloc, {static_cast<int64_t>(NumBytes)});
 
-  FB.EmitCLRFuncletRootEstablisher(*this, StackPtr, SlotSize);
+  FB.EmitCLRFuncletRootEstablisher();
 
   int SEHFrameOffset = 0;
   Register SPOrEstablisher =
@@ -2228,19 +2205,19 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  FB.EmitFPRSpillCFI(*this, IsWin64Prologue, SEHFrameOffset);
+  FB.EmitFPRSpillCFI(SEHFrameOffset);
   if (FB.HasWinCFI)
     FB.EmitWinCFI(X86::SEH_EndPrologue);
-  FB.EmitCLRFuncletPSPInfo(*this, StackPtr, SlotSize);
+  FB.EmitCLRFuncletPSPInfo();
   // Realign stack after we spilled callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
-  FB.EmitLateStackRealignment(*this, SPOrEstablisher);
+  FB.EmitLateStackRealignment(SPOrEstablisher);
 
   // We already dealt with stack realignment and funclets above.
   if (FB.IsFunclet && STI.is32Bit())
     return;
 
-  FB.EmitBasePointerSetup(*this, SPOrEstablisher);
+  FB.EmitBasePointerSetup(SPOrEstablisher);
 
   if (((!FB.HasFramePointer && NumBytes) || PushedRegs) && FB.ShouldEmitDWARFCFI) {
     // Mark end of stack pointer adjustment.
