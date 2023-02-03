@@ -2132,6 +2132,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   FB.EmitFuncletEstablisherSpill(*this, StackPtr);
   FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
   FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs);
+  // Realign stack after we pushed callee-saved registers (so that we'll be
+  // able to calculate their offsets from the frame pointer).
+  FB.EmitEarlyStackRealignment(*this, StackPtr);
 
   uint64_t NumBytes = StackSize
                     - FB.TFI->getCalleeSavedFrameSize()
@@ -2162,10 +2165,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       MFI.setOffsetAdjustment(-StackSize);
   }
 
-  // Realign stack after we pushed callee-saved registers (so that we'll be
-  // able to calculate their offsets from the frame pointer).
-  FB.EmitEarlyStackRealignment(*this, StackPtr);
-
   // If there is an SUB32ri of ESP immediately before this instruction, merge
   // the two. This can be the case when tail call elimination is enabled and
   // the callee has more arguments then the caller.
@@ -2176,6 +2175,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   uint64_t AlignedNumBytes = NumBytes;
   if (IsWin64Prologue && !FB.IsFunclet && TRI->hasStackRealignment(MF))
     AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
+
   if (AlignedNumBytes >= FB.StackProbeSize && FB.ShouldEmitStackProbe) {
     FB.EmitStackProbe(*this, StackPtr, NumBytes, Is64Bit);
   } else if (NumBytes) {
