@@ -1454,11 +1454,6 @@ class X86FrameLowering::FrameBuilder final {
   // Indicates if teh frame has any Windows CFI directives.
   bool HasWinCFI = false;
 
-  // Temporarily friend the emission function until the entire function is
-  // migrated to the builder.
-  friend void X86FrameLowering::emitPrologue(MachineFunction &,
-                                             MachineBasicBlock &) const;
-
 public:
   FrameBuilder(const X86FrameLowering &TFL, MachineFunction &MF,
                MachineBasicBlock &MBB)
@@ -1512,6 +1507,49 @@ public:
 
     ShouldEmitStackProbe = TLI->hasStackProbeSymbol(MF);
     StackProbeSize = TLI->getStackProbeSize(MF);
+  }
+
+  void EmitPrologue() {
+    int SEHFrameOffset = 0;
+    bool PushedRegs = false;
+    uint64_t NumBytes, ParentFrameNumBytes;
+    Register SPOrEstablisher =
+        IsFunclet ? FuncletFrameEstablisher
+                  : static_cast<Register>(StackPointer);
+    uint64_t StackSize = MF.getFrameInfo().getStackSize();
+
+    EncodeSwiftAsyncContextIntoFramePointer();
+    RealignStackForInterruptCC(StackSize);
+    ConfigureRedZoneReuse(StackSize);
+    EmitMandatoryTailCallArgumentReservation();
+    // Immediately spill establisher into the home slot. The runtime cares about
+    // this.
+    EmitFuncletEstablisherSpill();
+    EmitFramePointer();
+    EmitCFIForRegisterSpills(PushedRegs);
+    // Realign stack after we pushed callee-saved registers (so that we'll be
+    // able to calculate their offsets from the frame pointer).
+    EmitEarlyStackRealignment();
+    EmitStackAdjustment(StackSize, NumBytes, ParentFrameNumBytes);
+    EmitCLRFuncletRootEstablisher();
+    EmitWin64FramePointer(ParentFrameNumBytes, SPOrEstablisher, SEHFrameOffset);
+    Emit32BitFuncletStackPointerSpill();
+    EmitFPRSpillCFI(SEHFrameOffset);
+    if (HasWinCFI)
+      EmitWinCFI(X86::SEH_EndPrologue);
+    EmitCLRFuncletPSPInfo();
+    // Realign stack after we spilled callee-saved registers (so that we'll be
+    // able to calculate their offsets from the frame pointer).
+    EmitLateStackRealignment(SPOrEstablisher);
+    EmitBasePointerSetup(SPOrEstablisher);
+    EmitDWARFFrameMoves(StackSize, NumBytes, PushedRegs);
+    ClearDirectionForInterruptCC();
+  }
+
+  ~FrameBuilder() {
+    // At this point we know if the function has WinCFI or not.
+    if (!(IsFunclet && Is32Bit))
+      MF.setHasWinCFI(HasWinCFI);
   }
 
 private:
@@ -2238,45 +2276,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
          "MF used frame lowering for wrong subtarget");
 
   FrameBuilder FB(*this, MF, MBB);
-
-  int SEHFrameOffset = 0;
-  bool PushedRegs = false;
-  uint64_t NumBytes, ParentFrameNumBytes;
-  Register SPOrEstablisher =
-      FB.IsFunclet ? FB.FuncletFrameEstablisher
-                   : static_cast<Register>(StackPtr);
-  uint64_t StackSize = MF.getFrameInfo().getStackSize();
-
-  FB.EncodeSwiftAsyncContextIntoFramePointer();
-  FB.RealignStackForInterruptCC(StackSize);
-  FB.ConfigureRedZoneReuse(StackSize);
-  FB.EmitMandatoryTailCallArgumentReservation();
-  // Immediately spill establisher into the home slot. The runtime cares about
-  // this.
-  FB.EmitFuncletEstablisherSpill();
-  FB.EmitFramePointer();
-  FB.EmitCFIForRegisterSpills(PushedRegs);
-  // Realign stack after we pushed callee-saved registers (so that we'll be
-  // able to calculate their offsets from the frame pointer).
-  FB.EmitEarlyStackRealignment();
-  FB.EmitStackAdjustment(StackSize, NumBytes, ParentFrameNumBytes);
-  FB.EmitCLRFuncletRootEstablisher();
-  FB.EmitWin64FramePointer(ParentFrameNumBytes, SPOrEstablisher, SEHFrameOffset);
-  FB.Emit32BitFuncletStackPointerSpill();
-  FB.EmitFPRSpillCFI(SEHFrameOffset);
-  if (FB.HasWinCFI)
-    FB.EmitWinCFI(X86::SEH_EndPrologue);
-  FB.EmitCLRFuncletPSPInfo();
-  // Realign stack after we spilled callee-saved registers (so that we'll be
-  // able to calculate their offsets from the frame pointer).
-  FB.EmitLateStackRealignment(SPOrEstablisher);
-  FB.EmitBasePointerSetup(SPOrEstablisher);
-  FB.EmitDWARFFrameMoves(StackSize, NumBytes, PushedRegs);
-  FB.ClearDirectionForInterruptCC();
-
-  // At this point we know if the function has WinCFI or not.
-  if (!(FB.IsFunclet && Is32Bit))
-    MF.setHasWinCFI(FB.HasWinCFI);
+  FB.EmitPrologue();
 }
 
 bool X86FrameLowering::canUseLEAForSPInEpilogue(
