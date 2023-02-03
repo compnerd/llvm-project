@@ -2105,20 +2105,20 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       NumBytes = alignTo(NumBytes, MaxAlign);
   }
 
-  // Update the offset adjustment, which is mainly used by codeview to translate
-  // from ESP to VFRAME relative local variable offsets.
-  if (!FB.IsFunclet) {
+  // For EH funclets, only allocate enough space for outgoing calls. Save the
+  // NumBytes value that we would've used for the parent frame.
+  unsigned ParentFrameNumBytes = NumBytes;
+
+  if (FB.IsFunclet) {
+    NumBytes = getWinEHFuncletFrameSize(MF);
+  } else {
+    // Update the offset adjustment, which is mainly used by codeview to
+    // translate from ESP to VFRAME relative local variable offsets.
     if (FB.HasFramePointer && TRI->hasStackRealignment(MF))
       MFI.setOffsetAdjustment(-NumBytes);
     else
       MFI.setOffsetAdjustment(-StackSize);
   }
-
-  // For EH funclets, only allocate enough space for outgoing calls. Save the
-  // NumBytes value that we would've used for the parent frame.
-  unsigned ParentFrameNumBytes = NumBytes;
-  if (FB.IsFunclet)
-    NumBytes = getWinEHFuncletFrameSize(MF);
 
   // Skip the callee-saved push instructions.
   bool PushedRegs = false;
