@@ -1653,6 +1653,20 @@ private:
   }
 
   void EmitDWARFCFI(MCCFIInstruction &&CFI) {
+    // Mapping for machine moves:
+    //
+    //   DST: VirtualFP AND
+    //        SRC: VirtualFP              => DW_CFA_def_cfa_offset
+    //        ELSE                        => DW_CFA_def_cfa
+    //
+    //   SRC: VirtualFP AND
+    //        DST: Register               => DW_CFA_def_cfa_register
+    //
+    //   ELSE
+    //        OFFSET < 0                  => DW_CFA_offset_extended_sf
+    //        REG < 64                    => DW_CFA_offset + Reg
+    //        ELSE                        => DW_CFA_offset_extended
+
     if (!ShouldEmitDWARFCFI)
       return;
 
@@ -2076,20 +2090,6 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // this.
   FB.EmitFuncletEstablisherSpill(*this, StackPtr);
   FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
-
-  // Mapping for machine moves:
-  //
-  //   DST: VirtualFP AND
-  //        SRC: VirtualFP              => DW_CFA_def_cfa_offset
-  //        ELSE                        => DW_CFA_def_cfa
-  //
-  //   SRC: VirtualFP AND
-  //        DST: Register               => DW_CFA_def_cfa_register
-  //
-  //   ELSE
-  //        OFFSET < 0                  => DW_CFA_offset_extended_sf
-  //        REG < 64                    => DW_CFA_offset + Reg
-  //        ELSE                        => DW_CFA_offset_extended
 
   uint64_t NumBytes =
       StackSize - FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize;
