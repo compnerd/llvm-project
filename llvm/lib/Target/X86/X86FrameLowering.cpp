@@ -2053,6 +2053,26 @@ private:
     if (FrameSize)
       EmitWinCFI(X86::SEH_StackAlloc, {static_cast<int64_t>(FrameSize)});
   }
+
+  void EmitDWARFFrameMoves(uint64_t StackSize, uint64_t FrameSize,
+                           bool HaveSpills) {
+    if (!ShouldEmitDWARFCFI)
+      return;
+
+    if (!HaveSpills && (HasFramePointer || FrameSize == 0))
+      return;
+
+    // Mark end of stack pointer adjustment.
+
+    if (!HasFramePointer && FrameSize) {
+      // Define the current CFA rule to use the provided offset.
+      assert(StackSize);
+      EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr,
+                                                     StackSize + SlotSize));
+    }
+    // Emit DWARF info specifying the offsets of the callee-saved registers.
+    TFL.emitCalleeSavedFrameMoves(MBB, MBBI, DL, true);
+  }
 };
 
 /// emitPrologue - Push callee-saved registers onto the stack, which
@@ -2222,19 +2242,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
     return;
 
   FB.EmitBasePointerSetup(SPOrEstablisher);
-
-  if (((!FB.HasFramePointer && NumBytes) || PushedRegs) && FB.ShouldEmitDWARFCFI) {
-    // Mark end of stack pointer adjustment.
-    if (!FB.HasFramePointer && NumBytes) {
-      // Define the current CFA rule to use the provided offset.
-      assert(StackSize);
-      FB.EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, StackSize + SlotSize));
-    }
-
-    // Emit DWARF info specifying the offsets of the callee-saved registers.
-    emitCalleeSavedFrameMoves(MBB, FB.MBBI, FB.DL, true);
-  }
-
+  FB.EmitDWARFFrameMoves(StackSize, NumBytes, PushedRegs);
   FB.ClearDirectionForInterruptCC();
 
   // At this point we know if the function has WinCFI or not.
