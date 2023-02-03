@@ -199,6 +199,11 @@ public:
 
   unsigned getPSPSlotOffsetFromSP(const MachineFunction &MF) const;
   bool isWin64Prologue(const MachineFunction &MF) const;
+  /// Adjusts the stack pointer using LEA, SUB, or ADD.
+  MachineInstrBuilder BuildStackAdjustment(MachineBasicBlock &MBB,
+                                           MachineBasicBlock::iterator MBBI,
+                                           const DebugLoc &DL, int64_t Offset,
+                                           bool InEpilogue) const;
 
 private:
   bool needsDwarfCFI(const MachineFunction &MF) const;
@@ -251,12 +256,6 @@ private:
   bool adjustStackWithPops(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
                            int Offset) const;
-
-  /// Adjusts the stack pointer using LEA, SUB, or ADD.
-  MachineInstrBuilder BuildStackAdjustment(MachineBasicBlock &MBB,
-                                           MachineBasicBlock::iterator MBBI,
-                                           const DebugLoc &DL, int64_t Offset,
-                                           bool InEpilogue) const;
 
   unsigned getWinEHFuncletFrameSize(const MachineFunction &MF) const;
 

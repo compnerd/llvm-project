@@ -1969,6 +1969,21 @@ private:
     // .cv_fpo_setframe $FramePtr
     EmitWinCFI(X86::SEH_SetFrame, {FramePointer, 0});
   }
+
+  void EmitMandatoryTailCallArgumentReservation(const X86FrameLowering &TFL) {
+    int Reservation = TFI->getTCReturnAddrDelta();
+    if (Reservation == 0)
+      return;
+
+    if (TFL.isWin64Prologue(MF))
+      report_fatal_error("Can't handle guaranteed tail call under Win64 yet");
+
+    // Insert stack pointer adjustment for later moving of return addr.  Only
+    // applies to tail call optimized functions where the callee argument stack
+    // size is bigger than the callers.
+    TFL.BuildStackAdjustment(MBB, MBBI, DL, Reservation, /*InEpilogue*/false)
+      .setMIFlag(MachineInstr::FrameSetup);
+  }
 };
 }
 
@@ -2073,29 +2088,16 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   FB.EncodeSwiftAsyncContextIntoFramePointer();
   FB.RealignStackForInterruptCC(*this, Is64Bit, StackSize);
   FB.ConfigureRedZoneReuse(*this, SlotSize, StackSize);
-
-  // Space reserved for stack-based arguments when making a (ABI-guaranteed)
-  // tail call.
-  int TailCallArgReserveSize = FB.TFI->getTCReturnAddrDelta();
-  if (TailCallArgReserveSize && IsWin64Prologue)
-    report_fatal_error("Can't handle guaranteed tail call under win64 yet");
-
-  // Insert stack pointer adjustment for later moving of return addr.  Only
-  // applies to tail call optimized functions where the callee argument stack
-  // size is bigger than the callers.
-  if (TailCallArgReserveSize)
-    BuildStackAdjustment(MBB, FB.MBBI, FB.DL, TailCallArgReserveSize,
-                         /*InEpilogue=*/false)
-        .setMIFlag(MachineInstr::FrameSetup);
-
+  FB.EmitMandatoryTailCallArgumentReservation(*this);
   // Immediately spill establisher into the home slot. The runtime cares about
   // this.
   FB.EmitFuncletEstablisherSpill(*this, StackPtr);
   FB.EmitFramePointer(Is64Bit, IsWin64Prologue, SlotSize, StackPtr);
   FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs);
 
-  uint64_t NumBytes =
-      StackSize - FB.TFI->getCalleeSavedFrameSize() + TailCallArgReserveSize;
+  uint64_t NumBytes = StackSize
+                    - FB.TFI->getCalleeSavedFrameSize()
+                    + FB.TFI->getTCReturnAddrDelta();
 
   if (FB.HasFramePointer) {
     // Include extra hidden slot for the base pointer, if needed.
