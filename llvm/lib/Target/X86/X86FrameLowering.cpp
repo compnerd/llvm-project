@@ -2078,6 +2078,33 @@ private:
     // Emit DWARF info specifying the offsets of the callee-saved registers.
     TFL.emitCalleeSavedFrameMoves(MBB, MBBI, DL, true);
   }
+
+  void Emit32BitFuncletStackPointerSpill() {
+    if (!IsFunclet || !STI.is32Bit())
+      return;
+
+    assert(!IsWin64Prologue || !HasFramePointer);
+
+    // Reset ebp/esi to something good for funclets.
+    MBBI = TFL.restoreWin32EHStackPointers(MBB, MBBI, DL);
+
+    // If we're a catch funclet, we can be returned to via `catchret`. Save esp
+    // into the registration node so that the runtime will restore it for us.
+    if (MBB.isCleanupFuncletEntry())
+      return;
+
+    assert(Personality == EHPersonality::MSVC_CXX);
+
+    Register FramePointer;
+    int FI = MF.getWinEHFuncInfo()->EHRegNodeFrameIndex;
+    int64_t EHRegOffset =
+        TFL.getFrameIndexReference(MF, FI, FramePointer).getFixed();
+
+    // esp is the first field, so no extra displacement is needed.
+    addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV32mr)),
+                 FramePointer, false, EHRegOffset)
+        .addReg(X86::ESP);
+  }
 };
 
 /// emitPrologue - Push callee-saved registers onto the stack, which
@@ -2217,23 +2244,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       if (isAsynchronousEHPersonality(FB.Personality))
         MF.getWinEHFuncInfo()->SEHSetFrameOffset = SEHFrameOffset;
     }
-  } else if (FB.IsFunclet && STI.is32Bit()) {
-    // Reset EBP / ESI to something good for funclets.
-    FB.MBBI = restoreWin32EHStackPointers(MBB, FB.MBBI, FB.DL);
-    // If we're a catch funclet, we can be returned to via catchret. Save ESP
-    // into the registration node so that the runtime will restore it for us.
-    if (!MBB.isCleanupFuncletEntry()) {
-      assert(FB.Personality == EHPersonality::MSVC_CXX);
-      Register FrameReg;
-      int FI = MF.getWinEHFuncInfo()->EHRegNodeFrameIndex;
-      int64_t EHRegOffset = getFrameIndexReference(MF, FI, FrameReg).getFixed();
-      // ESP is the first field, so no extra displacement is needed.
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV32mr)), FrameReg,
-                   false, EHRegOffset)
-          .addReg(X86::ESP);
-    }
   }
 
+  FB.Emit32BitFuncletStackPointerSpill();
   FB.EmitFPRSpillCFI(SEHFrameOffset);
   if (FB.HasWinCFI)
     FB.EmitWinCFI(X86::SEH_EndPrologue);
