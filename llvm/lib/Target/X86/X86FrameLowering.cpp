@@ -1405,6 +1405,7 @@ class X86FrameLowering::FrameBuilder final {
   // Indicates if the target uses Windows CFI directives.
   bool TargetUsesWinCFI;
 
+  bool Is32Bit;
   bool Is64Bit;
   uint64_t SlotSize;
   bool IsWin64Prologue;
@@ -1464,8 +1465,9 @@ public:
       : F(MF.getFunction()), MF(MF), MFI(MF.getFrameInfo()), MBB(MBB),
         MMI(MF.getMMI()), STI(MF.getSubtarget<X86Subtarget>()),
         TII(*STI.getInstrInfo()), TFL(TFL), TRI(STI.getRegisterInfo()),
-        TFI(MF.getInfo<X86MachineFunctionInfo>()), Is64Bit(STI.is64Bit()),
-        SlotSize(TRI->getSlotSize()), IsWin64Prologue(TFL.isWin64Prologue(MF)),
+        TFI(MF.getInfo<X86MachineFunctionInfo>()), Is32Bit(STI.is32Bit()),
+        Is64Bit(STI.is64Bit()), SlotSize(TRI->getSlotSize()),
+        IsWin64Prologue(TFL.isWin64Prologue(MF)),
         HasStackRealignment(TRI->hasStackRealignment(MF)),
         StackPointer(TRI->getStackRegister()), HasFramePointer(TFL.hasFP(MF)),
         Uses64BitFramePointer(TFL.Uses64BitFramePtr),
@@ -1700,6 +1702,11 @@ private:
   }
 
   void ClearDirectionForInterruptCC() {
+    // FIXME: 32-bit funclets should not be interrupt handlers, should this be
+    // an assert?
+    if (IsFunclet && Is32Bit)
+      return;
+
     // X86 Interrupt handlers cannot assume anything about the direction flag
     // (DF in EFLAGS register). Clear this flag by creating `cld` instruction in
     // each prologue of interrupt handler function.
@@ -1851,6 +1858,10 @@ private:
   }
 
   void EmitBasePointerSetup(Register StackPointer) {
+    // 32-bit funclets do not have base pointers.
+    if (IsFunclet && Is32Bit)
+      return;
+
     if (!TRI->hasBasePointer(MF))
       return;
 
@@ -2061,6 +2072,10 @@ private:
 
   void EmitDWARFFrameMoves(uint64_t StackSize, uint64_t FrameSize,
                            bool HaveSpills) {
+    // 32-bit funclets do not have DWARF CFI for frame moves.
+    if (IsFunclet && Is32Bit)
+      return;
+
     if (!ShouldEmitDWARFCFI)
       return;
 
@@ -2080,7 +2095,7 @@ private:
   }
 
   void Emit32BitFuncletStackPointerSpill() {
-    if (!IsFunclet || !STI.is32Bit())
+    if (!IsFunclet || !Is32Bit)
       return;
 
     assert(!IsWin64Prologue || !HasFramePointer);
@@ -2255,17 +2270,13 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // Realign stack after we spilled callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
   FB.EmitLateStackRealignment(SPOrEstablisher);
-
-  // We already dealt with stack realignment and funclets above.
-  if (FB.IsFunclet && STI.is32Bit())
-    return;
-
   FB.EmitBasePointerSetup(SPOrEstablisher);
   FB.EmitDWARFFrameMoves(StackSize, NumBytes, PushedRegs);
   FB.ClearDirectionForInterruptCC();
 
   // At this point we know if the function has WinCFI or not.
-  MF.setHasWinCFI(FB.HasWinCFI);
+  if (!(FB.IsFunclet && Is32Bit))
+    MF.setHasWinCFI(FB.HasWinCFI);
 }
 
 bool X86FrameLowering::canUseLEAForSPInEpilogue(
