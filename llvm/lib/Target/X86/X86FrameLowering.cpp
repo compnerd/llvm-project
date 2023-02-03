@@ -2000,6 +2000,59 @@ private:
     uint64_t Alignment = TFL.calculateMaxStackAlign(MF);
     TFL.BuildStackAlignAND(MBB, MBBI, DL, StackPointer, Alignment);
   }
+
+  void EmitStackAdjustment(uint64_t StackSize, uint64_t &FrameSize,
+                           uint64_t &ParentFrameSize) {
+    const uint64_t Alignment = TFL.calculateMaxStackAlign(MF);
+
+    FrameSize =
+        StackSize - TFI->getCalleeSavedFrameSize() + TFI->getTCReturnAddrDelta();
+
+    if (HasFramePointer) {
+      // Include extra hidden slot for the base pointer, if needed.
+      FrameSize -= (TFI->getRestoreBasePointer() ? 0 : SlotSize);
+
+      // Callee-saved registers are pushed on the stack before the stack is
+      // realigned.
+      if (TRI->hasStackRealignment(MF) && !TFL.isWin64Prologue(MF))
+        FrameSize = alignTo(FrameSize, Alignment);
+    }
+
+    // Update the offset adjustment, which is mainly used by codeview to
+    // translate from ESP to VFRAME relative local variable offsets.
+    if (!IsFunclet) {
+      if (HasFramePointer && TRI->hasStackRealignment(MF))
+        MFI.setOffsetAdjustment(-FrameSize);
+      else
+        MFI.setOffsetAdjustment(-StackSize);
+    }
+
+    // For EH funclets, only allocate enough space for outgoing calls. Save the
+    // FrameSize value that we would've used for the parent frame.
+    ParentFrameSize = FrameSize;
+    if (IsFunclet)
+      FrameSize = TFL.getWinEHFuncletFrameSize(MF);
+
+    // If there is an SUB32ri of ESP immediately before this instruction, merge
+    // the two. This can be the case when tail call elimination is enabled and
+    // the callee has more arguments then the caller.
+    FrameSize -= TFL.mergeSPUpdates(MBB, MBBI, true);
+
+    uint64_t AlignedNumBytes = FrameSize;
+    if (TFL.isWin64Prologue(MF) && !IsFunclet && TRI->hasStackRealignment(MF))
+      AlignedNumBytes = alignTo(AlignedNumBytes, Alignment);
+
+    // Adjust stack pointer: ESP -= FrameSize.
+
+    if (AlignedNumBytes >= StackProbeSize && ShouldEmitStackProbe) {
+      EmitStackProbe(FrameSize);
+    } else if (FrameSize) {
+      TFL.emitSPUpdate(MBB, MBBI, DL, -(int64_t)FrameSize, /*InEpilogue=*/false);
+    }
+
+    if (FrameSize)
+      EmitWinCFI(X86::SEH_StackAlloc, {static_cast<int64_t>(FrameSize)});
+  }
 };
 
 /// emitPrologue - Push callee-saved registers onto the stack, which
@@ -2093,12 +2146,12 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
          "MF used frame lowering for wrong subtarget");
 
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  uint64_t MaxAlign = calculateMaxStackAlign(MF); // Desired stack alignment.
   uint64_t StackSize = MFI.getStackSize();    // Number of bytes to allocate.
   bool IsWin64Prologue = isWin64Prologue(MF);
 
   FrameBuilder FB(*this, MF, MBB);
   bool PushedRegs = false;
+  uint64_t NumBytes, ParentFrameNumBytes;
 
   FB.EncodeSwiftAsyncContextIntoFramePointer();
   FB.RealignStackForInterruptCC(StackSize);
@@ -2112,56 +2165,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
   FB.EmitEarlyStackRealignment();
-
-  uint64_t NumBytes = StackSize
-                    - FB.TFI->getCalleeSavedFrameSize()
-                    + FB.TFI->getTCReturnAddrDelta();
-
-  if (FB.HasFramePointer) {
-    // Include extra hidden slot for the base pointer, if needed.
-    NumBytes -= (FB.TFI->getRestoreBasePointer() ? 0 : SlotSize);
-
-    // Callee-saved registers are pushed on the stack before the stack is
-    // realigned.
-    if (TRI->hasStackRealignment(MF) && !IsWin64Prologue)
-      NumBytes = alignTo(NumBytes, MaxAlign);
-  }
-
-  // For EH funclets, only allocate enough space for outgoing calls. Save the
-  // NumBytes value that we would've used for the parent frame.
-  unsigned ParentFrameNumBytes = NumBytes;
-
-  if (FB.IsFunclet) {
-    NumBytes = getWinEHFuncletFrameSize(MF);
-  } else {
-    // Update the offset adjustment, which is mainly used by codeview to
-    // translate from ESP to VFRAME relative local variable offsets.
-    if (FB.HasFramePointer && TRI->hasStackRealignment(MF))
-      MFI.setOffsetAdjustment(-NumBytes);
-    else
-      MFI.setOffsetAdjustment(-StackSize);
-  }
-
-  // If there is an SUB32ri of ESP immediately before this instruction, merge
-  // the two. This can be the case when tail call elimination is enabled and
-  // the callee has more arguments then the caller.
-  NumBytes -= mergeSPUpdates(MBB, FB.MBBI, true);
-
-  // Adjust stack pointer: ESP -= numbytes.
-
-  uint64_t AlignedNumBytes = NumBytes;
-  if (IsWin64Prologue && !FB.IsFunclet && TRI->hasStackRealignment(MF))
-    AlignedNumBytes = alignTo(AlignedNumBytes, MaxAlign);
-
-  if (AlignedNumBytes >= FB.StackProbeSize && FB.ShouldEmitStackProbe) {
-    FB.EmitStackProbe(NumBytes);
-  } else if (NumBytes) {
-    emitSPUpdate(MBB, FB.MBBI, FB.DL, -(int64_t)NumBytes, /*InEpilogue=*/false);
-  }
-
-  if (NumBytes)
-    FB.EmitWinCFI(X86::SEH_StackAlloc, {static_cast<int64_t>(NumBytes)});
-
+  FB.EmitStackAdjustment(StackSize, NumBytes, ParentFrameNumBytes);
   FB.EmitCLRFuncletRootEstablisher();
 
   int SEHFrameOffset = 0;
