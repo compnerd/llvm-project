@@ -2105,6 +2105,31 @@ private:
                  FramePointer, false, EHRegOffset)
         .addReg(X86::ESP);
   }
+
+  void EmitWin64FramePointer(uint64_t ParentFrameSize, Register StackPointer,
+                             int &SEHFrameOffset) {
+    if (!IsWin64Prologue)
+      return;
+    if (!HasFramePointer)
+      return;
+
+    SEHFrameOffset = calculateSetFPREG(ParentFrameSize);
+    if (SEHFrameOffset)
+      addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::LEA64r), FramePointer),
+                   StackPointer, false, SEHFrameOffset);
+    else
+      BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64rr), FramePointer)
+          .addReg(StackPointer);
+
+    // Only emit CFI describing our frame pointer if we are not a funclet.
+    if (IsFunclet)
+      return;
+
+    assert(!ShouldEmitWinFPO && ".seh_setframe is incompatible with FPO data");
+    EmitWinCFI(X86::SEH_SetFrame, {FramePointer, SEHFrameOffset});
+    if (isAsynchronousEHPersonality(Personality))
+      MF.getWinEHFuncInfo()->SEHSetFrameOffset = SEHFrameOffset;
+  }
 };
 
 /// emitPrologue - Push callee-saved registers onto the stack, which
@@ -2197,13 +2222,15 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   assert(&STI == &MF.getSubtarget<X86Subtarget>() &&
          "MF used frame lowering for wrong subtarget");
 
-  MachineFrameInfo &MFI = MF.getFrameInfo();
-  uint64_t StackSize = MFI.getStackSize();    // Number of bytes to allocate.
-  bool IsWin64Prologue = isWin64Prologue(MF);
-
   FrameBuilder FB(*this, MF, MBB);
+
+  int SEHFrameOffset = 0;
   bool PushedRegs = false;
   uint64_t NumBytes, ParentFrameNumBytes;
+  Register SPOrEstablisher =
+      FB.IsFunclet ? FB.FuncletFrameEstablisher
+                   : static_cast<Register>(StackPtr);
+  uint64_t StackSize = MF.getFrameInfo().getStackSize();
 
   FB.EncodeSwiftAsyncContextIntoFramePointer();
   FB.RealignStackForInterruptCC(StackSize);
@@ -2219,33 +2246,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   FB.EmitEarlyStackRealignment();
   FB.EmitStackAdjustment(StackSize, NumBytes, ParentFrameNumBytes);
   FB.EmitCLRFuncletRootEstablisher();
-
-  int SEHFrameOffset = 0;
-  Register SPOrEstablisher =
-      FB.IsFunclet ? FB.FuncletFrameEstablisher
-                   : static_cast<Register>(StackPtr);
-
-  if (IsWin64Prologue && FB.HasFramePointer) {
-    // Set RBP to a small fixed offset from RSP. In the funclet case, we base
-    // this calculation on the incoming establisher, which holds the value of
-    // RSP from the parent frame at the end of the prologue.
-    SEHFrameOffset = calculateSetFPREG(ParentFrameNumBytes);
-    if (SEHFrameOffset)
-      addRegOffset(BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::LEA64r), FB.FramePointer),
-                   SPOrEstablisher, false, SEHFrameOffset);
-    else
-      BuildMI(MBB, FB.MBBI, FB.DL, TII.get(X86::MOV64rr), FB.FramePointer)
-          .addReg(SPOrEstablisher);
-
-    // If this is not a funclet, emit the CFI describing our frame pointer.
-    if (!FB.IsFunclet) {
-      assert(!FB.ShouldEmitWinFPO && "this setframe incompatible with FPO data");
-      FB.EmitWinCFI(X86::SEH_SetFrame, {FB.FramePointer, SEHFrameOffset});
-      if (isAsynchronousEHPersonality(FB.Personality))
-        MF.getWinEHFuncInfo()->SEHSetFrameOffset = SEHFrameOffset;
-    }
-  }
-
+  FB.EmitWin64FramePointer(ParentFrameNumBytes, SPOrEstablisher, SEHFrameOffset);
   FB.Emit32BitFuncletStackPointerSpill();
   FB.EmitFPRSpillCFI(SEHFrameOffset);
   if (FB.HasWinCFI)
