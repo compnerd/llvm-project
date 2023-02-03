@@ -1407,6 +1407,9 @@ class X86FrameLowering::FrameBuilder final {
 
   bool Is64Bit;
   uint64_t SlotSize;
+  bool IsWin64Prologue;
+  bool HasStackRealignment;
+  Register StackPointer;
 
   // Indiciates if the frame has a frame pointer.
   bool HasFramePointer;
@@ -1462,7 +1465,9 @@ public:
         MMI(MF.getMMI()), STI(MF.getSubtarget<X86Subtarget>()),
         TII(*STI.getInstrInfo()), TFL(TFL), TRI(STI.getRegisterInfo()),
         TFI(MF.getInfo<X86MachineFunctionInfo>()), Is64Bit(STI.is64Bit()),
-        SlotSize(TRI->getSlotSize()), HasFramePointer(TFL.hasFP(MF)),
+        SlotSize(TRI->getSlotSize()), IsWin64Prologue(TFL.isWin64Prologue(MF)),
+        HasStackRealignment(TRI->hasStackRealignment(MF)),
+        StackPointer(TRI->getStackRegister()), HasFramePointer(TFL.hasFP(MF)),
         Uses64BitFramePointer(TFL.Uses64BitFramePtr),
         FramePointer(TRI->getFrameRegister(MF)),
         MachineFramePointer(STI.isTarget64BitILP32()
@@ -1635,7 +1640,7 @@ private:
       addRegOffset(BuildMI(MBB, MBBI, DL,
                            TII.get(Is64Bit ? X86::MOV64rm : X86::MOV32rm),
                            Is64Bit ? X86::RAX : X86::EAX),
-                   TRI->getStackRegister(), false, NumBytes - (Is64Bit ? 8 : 4))
+                   StackPointer, false, NumBytes - (Is64Bit ? 8 : 4))
             .setMIFlag(MachineInstr::FrameSetup);
   }
 
@@ -1721,7 +1726,7 @@ private:
     if (!TFL.has128ByteRedZone(MF))
       return;
 
-    if (TRI->hasStackRealignment(MF))
+    if (HasStackRealignment)
       return;
 
     // Use of dynamic allocas prevents redzone reuse.
@@ -1752,7 +1757,7 @@ private:
   }
 
   void EmitFuncletEstablisherSpill() {
-    if (!TFL.isWin64Prologue(MF))
+    if (!IsWin64Prologue)
       return;
 
     if (!IsFunclet)
@@ -1764,7 +1769,7 @@ private:
 
     unsigned MOVmr = Uses64BitFramePointer ? X86::MOV64mr : X86::MOV32mr;
     addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(MOVmr)),
-                 TRI->getStackRegister(), true, 16)
+                 StackPointer, true, 16)
         .addReg(FuncletFrameEstablisher)
         .setMIFlag(MachineInstr::FrameSetup);
     MBB.addLiveIn(FuncletFrameEstablisher);
@@ -1794,7 +1799,7 @@ private:
     // frame, in case a sub-funclet or the GC needs it.
     auto MOFlags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
     addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)),
-                 TRI->getStackRegister(), false, PSPSlotOffset)
+                 StackPointer, false, PSPSlotOffset)
         .addReg(FuncletFrameEstablisher)
         .addMemOperand(MF.getMachineMemOperand(NoInfo, MOFlags, SlotSize,
                                                Align(SlotSize)));
@@ -1817,8 +1822,8 @@ private:
     unsigned PSPSlotOffset = TFL.getPSPSlotOffsetFromSP(MF);
     auto MOFlags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
     addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV64mr)),
-                 TRI->getStackRegister(), false, PSPSlotOffset)
-        .addReg(TRI->getStackRegister())
+                 StackPointer, false, PSPSlotOffset)
+        .addReg(StackPointer)
         .addMemOperand(MF.getMachineMemOperand(PSPInfo, MOFlags, SlotSize,
                                                Align(SlotSize)));
   }
@@ -1896,7 +1901,7 @@ private:
         if (X86::FR64RegClass.contains(Reg)) {
           Register Ignored;
           int Offset =
-              (TFL.isWin64Prologue(MF) && IsFunclet)
+              (IsWin64Prologue && IsFunclet)
                   ? TFL.getWin64EHFrameIndexRef(MF, FI, Ignored)
                   : (TFL.getFrameIndexReference(MF, FI, Ignored).getFixed() + SEHFrameOffset);
           assert(!ShouldEmitWinFPO && "SEH_SaveXMM incompatible with FPO data");
@@ -1930,7 +1935,7 @@ private:
     // Swift async_context is homed prior to the frame pointer.
     EmitSwiftAsyncContextSpill();
 
-    if (TFL.isWin64Prologue(MF) || IsFunclet)
+    if (IsWin64Prologue || IsFunclet)
       return;
 
     // `SwiftAsyncContextSpill` has already spilled the frame pointer after the
@@ -1939,7 +1944,7 @@ private:
       BuildMI(MBB, MBBI, DL,
               TII.get(Uses64BitFramePointer ? X86::MOV64rr : X86::MOV32rr),
               FramePointer)
-          .addReg(TRI->getStackRegister())
+          .addReg(StackPointer)
           .setMIFlag(MachineInstr::FrameSetup);
 
     // Mark effective beginning of when frame pointer becomes valid.  Define the
@@ -1955,7 +1960,7 @@ private:
     if (Reservation == 0)
       return;
 
-    if (TFL.isWin64Prologue(MF))
+    if (IsWin64Prologue)
       report_fatal_error("Can't handle guaranteed tail call under Win64 yet");
 
     // Insert stack pointer adjustment for later moving of return addr.  Only
@@ -1968,30 +1973,30 @@ private:
   void EmitEarlyStackRealignment() {
     // Don't do this for Win64, it needs to realign the stack after the
     // prologue.
-    if (TFL.isWin64Prologue(MF))
+    if (IsWin64Prologue)
       return;
 
     if (IsFunclet)
       return;
 
-    if (!TRI->hasStackRealignment(MF))
+    if (!HasStackRealignment)
       return;
 
     assert(HasFramePointer &&
            "There should be a frame pointer if stack is realigned.");
 
     uint64_t Alignment = TFL.calculateMaxStackAlign(MF);
-    TFL.BuildStackAlignAND(MBB, MBBI, DL, TRI->getStackRegister(), Alignment);
+    TFL.BuildStackAlignAND(MBB, MBBI, DL, StackPointer, Alignment);
     EmitWinCFI(X86::SEH_StackAlign, {static_cast<int64_t>(Alignment)});
   }
 
   void EmitLateStackRealignment(Register StackPointer) {
     // The non-Win64 targets have performed the stack re-alignment in the early
     // phase.
-    if (!TFL.isWin64Prologue(MF))
+    if (!IsWin64Prologue)
       return;
 
-    if (!TRI->hasStackRealignment(MF))
+    if (!HasStackRealignment)
       return;
 
     assert(HasFramePointer &&
@@ -2014,14 +2019,14 @@ private:
 
       // Callee-saved registers are pushed on the stack before the stack is
       // realigned.
-      if (TRI->hasStackRealignment(MF) && !TFL.isWin64Prologue(MF))
+      if (HasStackRealignment && !IsWin64Prologue)
         FrameSize = alignTo(FrameSize, Alignment);
     }
 
     // Update the offset adjustment, which is mainly used by codeview to
     // translate from ESP to VFRAME relative local variable offsets.
     if (!IsFunclet) {
-      if (HasFramePointer && TRI->hasStackRealignment(MF))
+      if (HasFramePointer && HasStackRealignment)
         MFI.setOffsetAdjustment(-FrameSize);
       else
         MFI.setOffsetAdjustment(-StackSize);
@@ -2039,7 +2044,7 @@ private:
     FrameSize -= TFL.mergeSPUpdates(MBB, MBBI, true);
 
     uint64_t AlignedNumBytes = FrameSize;
-    if (TFL.isWin64Prologue(MF) && !IsFunclet && TRI->hasStackRealignment(MF))
+    if (IsWin64Prologue && !IsFunclet && HasStackRealignment)
       AlignedNumBytes = alignTo(AlignedNumBytes, Alignment);
 
     // Adjust stack pointer: ESP -= FrameSize.
