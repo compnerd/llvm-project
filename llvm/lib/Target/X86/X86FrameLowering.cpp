@@ -1984,6 +1984,44 @@ private:
     TFL.BuildStackAdjustment(MBB, MBBI, DL, Reservation, /*InEpilogue*/false)
       .setMIFlag(MachineInstr::FrameSetup);
   }
+
+  void EmitEarlyStackRealignment(const X86FrameLowering &TFL,
+                                 Register StackPointer) {
+    // Don't do this for Win64, it needs to realign the stack after the
+    // prologue.
+    if (TFL.isWin64Prologue(MF))
+      return;
+
+    if (IsFunclet)
+      return;
+
+    if (!TRI->hasStackRealignment(MF))
+      return;
+
+    assert(HasFramePointer &&
+           "There should be a frame pointer if stack is realigned.");
+
+    uint64_t Alignment = TFL.calculateMaxStackAlign(MF);
+    TFL.BuildStackAlignAND(MBB, MBBI, DL, StackPointer, Alignment);
+    EmitWinCFI(X86::SEH_StackAlign, {static_cast<int64_t>(Alignment)});
+  }
+
+  void EmitLateStackRealignment(const X86FrameLowering &TFL,
+                                Register StackPointer) {
+    // The non-Win64 targets have performed the stack re-alignment in the early
+    // phase.
+    if (!TFL.isWin64Prologue(MF))
+      return;
+
+    if (!TRI->hasStackRealignment(MF))
+      return;
+
+    assert(HasFramePointer &&
+           "There should be a frame pointer if stack is realigned.");
+
+    uint64_t Alignment = TFL.calculateMaxStackAlign(MF);
+    TFL.BuildStackAlignAND(MBB, MBBI, DL, StackPointer, Alignment);
+  }
 };
 }
 
@@ -2126,13 +2164,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
-  // Don't do this for Win64, it needs to realign the stack after the prologue.
-  if (!IsWin64Prologue && !FB.IsFunclet && TRI->hasStackRealignment(MF)) {
-    assert(FB.HasFramePointer && "There should be a frame pointer if stack is realigned.");
-    BuildStackAlignAND(MBB, FB.MBBI, FB.DL, StackPtr, MaxAlign);
-
-    FB.EmitWinCFI(X86::SEH_StackAlign, {static_cast<int64_t>(MaxAlign)});
-  }
+  FB.EmitEarlyStackRealignment(*this, StackPtr);
 
   // If there is an SUB32ri of ESP immediately before this instruction, merge
   // the two. This can be the case when tail call elimination is enabled and
@@ -2200,14 +2232,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
   if (FB.HasWinCFI)
     FB.EmitWinCFI(X86::SEH_EndPrologue);
   FB.EmitCLRFuncletPSPInfo(*this, StackPtr, SlotSize);
-
   // Realign stack after we spilled callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
-  // Win64 requires aligning the stack after the prologue.
-  if (IsWin64Prologue && TRI->hasStackRealignment(MF)) {
-    assert(FB.HasFramePointer && "There should be a frame pointer if stack is realigned.");
-    BuildStackAlignAND(MBB, FB.MBBI, FB.DL, SPOrEstablisher, MaxAlign);
-  }
+  FB.EmitLateStackRealignment(*this, SPOrEstablisher);
 
   // We already dealt with stack realignment and funclets above.
   if (FB.IsFunclet && STI.is32Bit())

@@ -199,16 +199,19 @@ public:
 
   unsigned getPSPSlotOffsetFromSP(const MachineFunction &MF) const;
   bool isWin64Prologue(const MachineFunction &MF) const;
+  uint64_t calculateMaxStackAlign(const MachineFunction &MF) const;
   /// Adjusts the stack pointer using LEA, SUB, or ADD.
   MachineInstrBuilder BuildStackAdjustment(MachineBasicBlock &MBB,
                                            MachineBasicBlock::iterator MBBI,
                                            const DebugLoc &DL, int64_t Offset,
                                            bool InEpilogue) const;
+  /// Aligns the stack pointer by ANDing it with -MaxAlign.
+  void BuildStackAlignAND(MachineBasicBlock &MBB,
+                          MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
+                          unsigned Reg, uint64_t MaxAlign) const;
 
 private:
   bool needsDwarfCFI(const MachineFunction &MF) const;
-
-  uint64_t calculateMaxStackAlign(const MachineFunction &MF) const;
 
   /// Emit target stack probe as a call to a helper function
   void emitStackProbeCall(
@@ -246,11 +249,6 @@ private:
                             MachineBasicBlock &MBB) const override;
 
   void adjustFrameForMsvcCxxEh(MachineFunction &MF) const;
-
-  /// Aligns the stack pointer by ANDing it with -MaxAlign.
-  void BuildStackAlignAND(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
-                          unsigned Reg, uint64_t MaxAlign) const;
 
   /// Make small positive stack adjustments using POPs.
   bool adjustStackWithPops(MachineBasicBlock &MBB,
