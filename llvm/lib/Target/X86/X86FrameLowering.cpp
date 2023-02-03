@@ -1838,8 +1838,9 @@ private:
   }
 
   // FIXME: can we hoist `SlotSize` into a computation in the constructor?
-  void EmitCFIForRegisterSpills(uint64_t SlotSize,
-                                bool &HasSpills, int &StackOffset) {
+  void EmitCFIForRegisterSpills(uint64_t SlotSize, bool &HasSpills) {
+    int64_t Offset = 2 * SlotSize;
+
     MachineBasicBlock::iterator MBBE = MBB.end();
     while (MBBI != MBBE && MBBI->getFlag(MachineInstr::FrameSetup) &&
            (MBBI->getOpcode() == X86::PUSH32r ||
@@ -1850,8 +1851,8 @@ private:
       if (!HasFramePointer) {
         // Mark callee-saved push instruction. Define the current CFA rule to
         // use the provided offset.
-        EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, -StackOffset));
-        StackOffset += -SlotSize;
+        EmitDWARFCFI(MCCFIInstruction::cfiDefCfaOffset(nullptr, Offset));
+        Offset += SlotSize;
       }
       EmitWinCFI(X86::SEH_PushReg, {Reg});
 
@@ -2121,9 +2122,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Skip the callee-saved push instructions.
   bool PushedRegs = false;
-  int StackOffset = -2 * SlotSize;
-
-  FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs, StackOffset);
+  FB.EmitCFIForRegisterSpills(SlotSize, PushedRegs);
 
   // Realign stack after we pushed callee-saved registers (so that we'll be
   // able to calculate their offsets from the frame pointer).
