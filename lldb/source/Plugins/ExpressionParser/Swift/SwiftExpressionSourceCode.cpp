@@ -329,16 +329,37 @@ __builtin_logger_initialize()
 
   assert(!playground && !repl && "Playground/REPL mode not expected");
 
+  auto path_literal = [](const char *path) -> std::string {
+    llvm::SmallString<261> buffer{path};
+    llvm::sys::path::native(buffer);
+
+    std::string literal = buffer.str().str();
+
+    std::string escaped;
+    escaped.reserve(2 * literal.size());
+
+    for (std::string::size_type start = 0, end = 0;
+         end = literal.find('\\', start); start = end + 1) {
+      escaped.append(literal, start, end - start);
+      if (end == std::string::npos)
+        break;
+      escaped.append("\\\\");
+    }
+
+    return escaped;
+  };
+
   if (pound_file && pound_line) {
     fixed_text.Printf("#sourceLocation(file: \"%s\", line: %u)\n%s\n",
-                      pound_file, pound_line, orig_text);
+                      path_literal(pound_file).c_str(), pound_line, orig_text);
     text = fixed_text.GetString().data();
   } else if (generate_debug_info) {
     std::string expr_source_path;
     if (SwiftASTManipulator::SaveExpressionTextToTempFile(orig_text, options,
                                                           expr_source_path)) {
       fixed_text.Printf("#sourceLocation(file: \"%s\", line: 1)\n%s\n",
-                        expr_source_path.c_str(), orig_text);
+                        path_literal(expr_source_path.c_str()).c_str(),
+                        orig_text);
       text = fixed_text.GetString().data();
     }
   }
